@@ -1,13 +1,20 @@
 import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
+import path from "path";
+import { fileURLToPath } from "url";
 
 dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
+
+app.use(express.static(path.join(__dirname, "dist")));
 
 let cachedNews = null;
 let cachedAt = 0;
@@ -130,6 +137,10 @@ app.get("/api/news", async (req, res) => {
       error: "뉴스를 가져오는 중 오류가 발생했습니다.",
     });
   }
+});
+
+app.get("*", (req, res) => {
+  res.sendFile(path.join(__dirname, "dist", "index.html"));
 });
 
 app.listen(PORT, "0.0.0.0", () => {
