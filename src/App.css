@@ -1,0 +1,181 @@
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: #f5f6f8;
+  color: #191919;
+  font-family:
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    Roboto,
+    "Noto Sans KR",
+    sans-serif;
+}
+
+button {
+  font: inherit;
+}
+
+.news-app {
+  width: 100%;
+  max-width: 720px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 28px 18px 40px;
+}
+
+.news-header {
+  padding: 8px 4px 22px;
+}
+
+.news-date {
+  margin: 0 0 7px;
+  color: #8a8f98;
+  font-size: 13px;
+}
+
+.news-header h1 {
+  margin: 0;
+  font-size: 30px;
+  font-weight: 800;
+  letter-spacing: -1.2px;
+}
+
+.news-subtitle {
+  margin: 8px 0 0;
+  color: #666b75;
+  font-size: 15px;
+}
+
+.category-nav {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 2px 0 18px;
+  scrollbar-width: none;
+}
+
+.category-nav::-webkit-scrollbar {
+  display: none;
+}
+
+.category {
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 20px;
+  padding: 9px 15px;
+  background: #ffffff;
+  color: #666b75;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.category.active {
+  background: #191919;
+  color: #ffffff;
+}
+
+.top-news {
+  margin-top: 4px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 12px;
+}
+
+.section-title span {
+  font-size: 19px;
+}
+
+.section-title h2 {
+  margin: 0;
+  font-size: 19px;
+  font-weight: 800;
+  letter-spacing: -0.5px;
+}
+
+.news-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.news-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 13px;
+  padding: 18px 15px;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.rank {
+  flex: 0 0 27px;
+  padding-top: 2px;
+  color: #8a8f98;
+  font-size: 16px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.news-content {
+  min-width: 0;
+  flex: 1;
+}
+
+.news-meta {
+  display: flex;
+  gap: 5px;
+  margin-bottom: 6px;
+  color: #8a8f98;
+  font-size: 12px;
+}
+
+.news-content h3 {
+  margin: 0;
+  color: #191919;
+  font-size: 16px;
+  line-height: 1.45;
+  font-weight: 750;
+  letter-spacing: -0.35px;
+}
+
+.news-content p {
+  margin: 7px 0 0;
+  color: #777c85;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.arrow {
+  flex: 0 0 auto;
+  padding-top: 20px;
+  color: #b2b6bd;
+  font-size: 24px;
+  line-height: 1;
+}
+
+@media (max-width: 480px) {
+  .news-app {
+    padding: 22px 14px 32px;
+  }
+
+  .news-header h1 {
+    font-size: 27px;
+  }
+
+  .news-card {
+    padding: 16px 13px;
+  }
+}
+.news-card {
+  text-decoration: none;
+}
