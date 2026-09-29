@@ -17,7 +17,7 @@ function App() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("http://localhost:3000/api/news")
+    fetch("https://today-news-oc9s.onrender.com/api/news")
       .then((response) => {
         if (!response.ok) {
           throw new Error("뉴스를 불러오지 못했습니다.");
