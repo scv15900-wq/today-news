@@ -11,10 +11,13 @@ type NewsItem = {
   url: string;
 };
 
+const categories = ["🔥 종합", "경제", "사회", "IT", "국제"];
+
 function App() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [activeCategory, setActiveCategory] = useState("🔥 종합");
 
   useEffect(() => {
     fetch("https://today-news-oc9s.onrender.com/api/news")
@@ -35,43 +38,50 @@ function App() {
       });
   }, []);
 
+  const filteredNews =
+    activeCategory === "🔥 종합"
+      ? news
+      : news.filter((item) => item.category === activeCategory);
+
   return (
     <main className="news-app">
       <header className="news-header">
         <p className="news-date">2026년 9월 29일</p>
-
         <h1>오늘의 뉴스</h1>
-
-        <p className="news-subtitle">
-          오늘 가장 주목받는 뉴스 TOP 10
-        </p>
+        <p className="news-subtitle">오늘 가장 주목받는 뉴스 TOP 10</p>
       </header>
 
       <nav className="category-nav" aria-label="뉴스 카테고리">
-        <button className="category active">🔥 종합</button>
-        <button className="category">경제</button>
-        <button className="category">사회</button>
-        <button className="category">IT</button>
-        <button className="category">국제</button>
+        {categories.map((category) => (
+          <button
+            key={category}
+            className={`category ${
+              activeCategory === category ? "active" : ""
+            }`}
+            onClick={() => setActiveCategory(category)}
+          >
+            {category}
+          </button>
+        ))}
       </nav>
 
       <section className="top-news">
         <div className="section-title">
           <span>🔥</span>
-          <h2>오늘의 TOP 10</h2>
+          <h2>{activeCategory} 뉴스</h2>
         </div>
 
-        {loading && (
-          <p>뉴스를 불러오는 중입니다...</p>
+        {loading && <p>뉴스를 불러오는 중입니다...</p>}
+
+        {error && <p>{error}</p>}
+
+        {!loading && !error && filteredNews.length === 0 && (
+          <p>현재 해당 카테고리의 뉴스가 없습니다.</p>
         )}
 
-        {error && (
-          <p>{error}</p>
-        )}
-
-        {!loading && !error && (
+        {!loading && !error && filteredNews.length > 0 && (
           <div className="news-list">
-            {news.map((item, index) => (
+            {filteredNews.map((item, index) => (
               <a
                 className="news-card"
                 key={item.id}
@@ -91,7 +101,6 @@ function App() {
                   </div>
 
                   <h3>{item.title}</h3>
-
                   <p>{item.summary}</p>
                 </div>
 
