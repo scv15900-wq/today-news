@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import "./app.css";
+import "./App.css";
 
 type NewsItem = {
   id: number;
