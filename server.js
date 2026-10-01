@@ -15,10 +15,12 @@ const PORT = process.env.PORT || 3000;
 app.use(cors());
 app.use(express.static(path.join(__dirname, "dist")));
 
-let cachedNews = null;
-let cachedAt = 0;
+let cachedNews = [];
+let isRefreshing = false;
 
-const CACHE_TIME = 3 * 60 * 60 * 1000;
+// 3시간마다 뉴스 갱신
+const REFRESH_TIME = 3 * 60 * 60 * 1000;
+
 const REQUEST_DELAY = 1500;
 const RETRY_DELAY = 5000;
 
@@ -161,7 +163,6 @@ const societyKeywords = [
   "사회",
 ];
 
-// 생활 뉴스 키워드
 const lifeKeywords = [
   "날씨",
   "기온",
@@ -222,7 +223,6 @@ function containsKeyword(article, keywords) {
   );
 }
 
-// 키워드 분류 카테고리는 완전히 같은 URL만 제거한다.
 function removeExactDuplicates(articles) {
   const result = [];
   const urls = new Set();
@@ -332,7 +332,6 @@ async function getNews() {
       )
     ).slice(0, 10);
 
-  // 생활 관련 기사를 전체 뉴스에서 찾는다.
   const lifeKeywordArticles =
     removeExactDuplicates(
       allArticles.filter((article) =>
@@ -343,7 +342,6 @@ async function getNews() {
       )
     );
 
-  // health에서 받아온 기사도 생활 후보에 포함한다.
   const lifeArticles =
     removeExactDuplicates([
       ...lifeKeywordArticles,
@@ -432,50 +430,61 @@ async function getNews() {
   return news;
 }
 
-app.get("/api/news", async (req, res) => {
+// 백그라운드에서 뉴스 갱신
+async function refreshNews() {
+  if (isRefreshing) {
+    console.log("이미 뉴스 갱신 중");
+    return;
+  }
+
+  isRefreshing = true;
+
+  console.log("======================");
+  console.log("뉴스 갱신 시작");
+  console.log("======================");
+
   try {
-    const now = Date.now();
-
-    if (
-      cachedNews &&
-      now - cachedAt < CACHE_TIME
-    ) {
-      console.log("캐시 뉴스 사용");
-      return res.json(cachedNews);
-    }
-
     const news = await getNews();
 
+    // 새 데이터를 정상적으로 받았을 때만
+    // 기존 캐시를 교체한다.
     if (news.length > 0) {
       cachedNews = news;
-      cachedAt = now;
 
-      return res.json(news);
+      console.log(
+        `뉴스 캐시 갱신 완료: ${news.length}개`
+      );
+    } else {
+      console.log(
+        "새 뉴스가 없어 기존 캐시를 유지합니다."
+      );
     }
-
-    if (cachedNews) {
-      return res.json(cachedNews);
-    }
-
-    return res.status(503).json({
-      error:
-        "현재 뉴스 데이터를 가져올 수 없습니다.",
-    });
   } catch (error) {
     console.error(
-      "뉴스 서버 오류:",
+      "뉴스 갱신 실패:",
       error
     );
 
-    if (cachedNews) {
-      return res.json(cachedNews);
-    }
-
-    return res.status(500).json({
-      error:
-        "뉴스를 가져오는 중 오류가 발생했습니다.",
-    });
+    console.log(
+      "기존 캐시를 유지합니다."
+    );
+  } finally {
+    isRefreshing = false;
   }
+}
+
+// 사용자가 접속하면 GNews를 기다리지 않고
+// 현재 서버에 저장된 뉴스만 즉시 전달
+app.get("/api/news", (req, res) => {
+  if (cachedNews.length > 0) {
+    return res.json(cachedNews);
+  }
+
+  // 서버 시작 직후 아직 최초 갱신이 끝나지 않은 경우
+  return res.status(503).json({
+    error:
+      "뉴스를 준비하고 있습니다. 잠시 후 다시 시도해주세요.",
+  });
 });
 
 app.use((req, res) => {
@@ -490,4 +499,12 @@ app.use((req, res) => {
 
 app.listen(PORT, "0.0.0.0", () => {
   console.log(`뉴스 서버 실행: ${PORT}`);
+
+  // 서버가 켜지면 즉시 첫 뉴스 갱신 시작
+  refreshNews();
+
+  // 이후 3시간마다 백그라운드에서 갱신
+  setInterval(() => {
+    refreshNews();
+  }, REFRESH_TIME);
 });
