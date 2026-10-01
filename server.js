@@ -18,13 +18,8 @@ app.use(express.static(path.join(__dirname, "dist")));
 let cachedNews = null;
 let cachedAt = 0;
 
-// 뉴스 캐시: 30분
 const CACHE_TIME = 30 * 60 * 1000;
-
-// GNews 요청 사이 간격
 const REQUEST_DELAY = 1500;
-
-// 429 발생 시 재시도 대기시간
 const RETRY_DELAY = 5000;
 
 function sleep(ms) {
@@ -49,14 +44,14 @@ function makeNewsItem(article, category, id) {
 }
 
 /* -------------------------
-   GNews 실제 요청
+   GNews 요청
 ------------------------- */
 
-async function fetchFromGNews(endpoint, params, categoryName) {
+async function fetchFromGNews(gnewsCategory, name) {
   const apiKey = process.env.GNEWS_API_KEY;
 
-  const searchParams = new URLSearchParams({
-    ...params,
+  const params = new URLSearchParams({
+    category: gnewsCategory,
     lang: "ko",
     country: "kr",
     max: "10",
@@ -64,16 +59,15 @@ async function fetchFromGNews(endpoint, params, categoryName) {
   });
 
   const url =
-    `https://gnews.io/api/v4/${endpoint}?` +
-    searchParams.toString();
+    "https://gnews.io/api/v4/top-headlines?" +
+    params.toString();
 
   try {
     let response = await fetch(url);
 
-    // 너무 빠른 요청이면 한 번 기다렸다가 재시도
     if (response.status === 429) {
       console.log(
-        `[${categoryName}] 요청 제한 발생 - 5초 후 재시도`
+        `[${name}] 요청 제한 - 5초 후 재시도`
       );
 
       await sleep(RETRY_DELAY);
@@ -85,7 +79,7 @@ async function fetchFromGNews(endpoint, params, categoryName) {
       const errorText = await response.text();
 
       console.error(
-        `[${categoryName}] GNews 오류`,
+        `[${name}] GNews 오류`,
         response.status,
         errorText
       );
@@ -95,18 +89,18 @@ async function fetchFromGNews(endpoint, params, categoryName) {
 
     const data = await response.json();
 
-    if (!Array.isArray(data.articles)) {
-      return [];
-    }
+    const articles = Array.isArray(data.articles)
+      ? data.articles
+      : [];
 
     console.log(
-      `[${categoryName}] ${data.articles.length}개 가져옴`
+      `[${name}] ${articles.length}개 가져옴`
     );
 
-    return data.articles;
+    return articles;
   } catch (error) {
     console.error(
-      `[${categoryName}] 요청 실패:`,
+      `[${name}] 요청 실패:`,
       error.message
     );
 
@@ -115,38 +109,72 @@ async function fetchFromGNews(endpoint, params, categoryName) {
 }
 
 /* -------------------------
-   GNews 카테고리 요청
+   키워드 분류
 ------------------------- */
 
-async function fetchCategory(
-  gnewsCategory,
-  appCategory
-) {
-  return fetchFromGNews(
-    "top-headlines",
-    {
-      category: gnewsCategory,
-    },
-    appCategory
+const politicalKeywords = [
+  "대통령",
+  "국회",
+  "정부",
+  "여당",
+  "야당",
+  "정당",
+  "의원",
+  "장관",
+  "총리",
+  "청와대",
+  "대통령실",
+  "선거",
+  "정치",
+];
+
+const societyKeywords = [
+  "경찰",
+  "검찰",
+  "법원",
+  "재판",
+  "사건",
+  "사고",
+  "화재",
+  "범죄",
+  "구속",
+  "체포",
+  "교육",
+  "학교",
+  "노동",
+  "복지",
+  "사회",
+];
+
+function containsKeyword(article, keywords) {
+  const text = [
+    article.title || "",
+    article.description || "",
+  ]
+    .join(" ")
+    .toLowerCase();
+
+  return keywords.some((keyword) =>
+    text.includes(keyword.toLowerCase())
   );
 }
 
-/* -------------------------
-   정치 / 사회 검색
-------------------------- */
+function removeDuplicates(articles) {
+  const seen = new Set();
 
-async function fetchSearch(
-  query,
-  appCategory
-) {
-  return fetchFromGNews(
-    "search",
-    {
-      q: query,
-      sortby: "publishedAt",
-    },
-    appCategory
-  );
+  return articles.filter((article) => {
+    if (!article.url) {
+      return false;
+    }
+
+    if (seen.has(article.url)) {
+      return false;
+    }
+
+    seen.add(article.url);
+
+    return true;
+  });
 }
 
 /* -------------------------
@@ -160,171 +188,169 @@ async function getNews() {
     );
   }
 
-  const news = [];
-  let id = 1;
-
   /*
-    중요:
-    Promise.all을 사용하지 않는다.
-
-    카테고리를 하나씩 순서대로 요청해서
-    GNews에 동시에 요청이 몰리는 것을 줄인다.
+    general을 추가해서 정치/사회 후보 기사도 확보한다.
+    모든 요청은 동시에 보내지 않고 순서대로 보낸다.
   */
 
-  const requests = [
-   {
-  name: "정치",
-  load: () =>
-    fetchSearch(
-      "정치",
-      "정치"
-    ),
-},
-
+  const categoryRequests = [
     {
-      name: "경제",
-      load: () =>
-        fetchCategory(
-          "business",
-          "경제"
-        ),
+      gnews: "general",
+      app: "종합후보",
     },
-
     {
-      name: "사회",
-      load: () =>
-        fetchSearch(
-          "사회 OR 사건 OR 사고 OR 경찰 OR 법원",
-          "사회"
-        ),
+      gnews: "business",
+      app: "경제",
     },
-
     {
-      name: "IT",
-      load: () =>
-        fetchCategory(
-          "technology",
-          "IT"
-        ),
+      gnews: "technology",
+      app: "IT",
     },
-
     {
-      name: "국제",
-      load: () =>
-        fetchCategory(
-          "world",
-          "국제"
-        ),
+      gnews: "world",
+      app: "국제",
     },
-
     {
-      name: "스포츠",
-      load: () =>
-        fetchCategory(
-          "sports",
-          "스포츠"
-        ),
+      gnews: "sports",
+      app: "스포츠",
     },
-
     {
-      name: "연예",
-      load: () =>
-        fetchCategory(
-          "entertainment",
-          "연예"
-        ),
+      gnews: "entertainment",
+      app: "연예",
     },
-
     {
-      name: "과학",
-      load: () =>
-        fetchCategory(
-          "science",
-          "과학"
-        ),
+      gnews: "science",
+      app: "과학",
     },
-
     {
-      name: "생활",
-      load: () =>
-        fetchCategory(
-          "health",
-          "생활"
-        ),
+      gnews: "health",
+      app: "생활",
     },
   ];
 
-  for (let i = 0; i < requests.length; i++) {
-    const request = requests[i];
+  const collected = {};
+
+  for (
+    let i = 0;
+    i < categoryRequests.length;
+    i++
+  ) {
+    const request = categoryRequests[i];
 
     console.log(
-      `[${request.name}] 뉴스 요청 중...`
+      `[${request.app}] 뉴스 요청 중...`
     );
 
-    const articles = await request.load();
+    collected[request.app] =
+      await fetchFromGNews(
+        request.gnews,
+        request.app
+      );
 
-    const seenUrls = new Set();
+    if (i < categoryRequests.length - 1) {
+      await sleep(REQUEST_DELAY);
+    }
+  }
 
-    let added = 0;
+  /*
+    정치/사회는 general을 중심으로,
+    다른 분야 기사까지 함께 살펴본다.
+  */
+
+  const allArticles = removeDuplicates(
+    Object.values(collected).flat()
+  );
+
+  const politicalArticles =
+    allArticles
+      .filter((article) =>
+        containsKeyword(
+          article,
+          politicalKeywords
+        )
+      )
+      .slice(0, 10);
+
+  const societyArticles =
+    allArticles
+      .filter((article) =>
+        containsKeyword(
+          article,
+          societyKeywords
+        )
+      )
+      .slice(0, 10);
+
+  const finalCategories = [
+    {
+      name: "정치",
+      articles: politicalArticles,
+    },
+    {
+      name: "경제",
+      articles: collected["경제"] || [],
+    },
+    {
+      name: "사회",
+      articles: societyArticles,
+    },
+    {
+      name: "IT",
+      articles: collected["IT"] || [],
+    },
+    {
+      name: "국제",
+      articles: collected["국제"] || [],
+    },
+    {
+      name: "스포츠",
+      articles: collected["스포츠"] || [],
+    },
+    {
+      name: "연예",
+      articles: collected["연예"] || [],
+    },
+    {
+      name: "과학",
+      articles: collected["과학"] || [],
+    },
+    {
+      name: "생활",
+      articles: collected["생활"] || [],
+    },
+  ];
+
+  const news = [];
+  let id = 1;
+
+  for (const category of finalCategories) {
+    const articles = removeDuplicates(
+      category.articles
+    ).slice(0, 10);
 
     for (const article of articles) {
-      if (added >= 10) {
-        break;
-      }
-
-      if (!article.url) {
-        continue;
-      }
-
-      if (seenUrls.has(article.url)) {
-        continue;
-      }
-
-      seenUrls.add(article.url);
-
       news.push(
         makeNewsItem(
           article,
-          request.name,
+          category.name,
           id
         )
       );
 
       id += 1;
-      added += 1;
-    }
-
-    console.log(
-      `[${request.name}] 최종 ${added}개 저장`
-    );
-
-    // 마지막 요청 뒤에는 기다릴 필요 없음
-    if (i < requests.length - 1) {
-      await sleep(REQUEST_DELAY);
     }
   }
 
   console.log("----------------------");
 
-  const categoryNames = [
-    "정치",
-    "경제",
-    "사회",
-    "IT",
-    "국제",
-    "스포츠",
-    "연예",
-    "과학",
-    "생활",
-  ];
-
-  for (const category of categoryNames) {
+  for (const category of finalCategories) {
     const count = news.filter(
-      (item) => item.category === category
+      (item) =>
+        item.category === category.name
     ).length;
 
     console.log(
-      `${category}: ${count}개`
+      `${category.name}: ${count}개`
     );
   }
 
@@ -338,14 +364,13 @@ async function getNews() {
 }
 
 /* -------------------------
-   뉴스 API
+   API
 ------------------------- */
 
 app.get("/api/news", async (req, res) => {
   try {
     const now = Date.now();
 
-    // 30분 동안은 GNews를 다시 호출하지 않음
     if (
       cachedNews &&
       now - cachedAt < CACHE_TIME
@@ -364,8 +389,6 @@ app.get("/api/news", async (req, res) => {
       return res.json(news);
     }
 
-    // 새 요청이 전부 실패했지만
-    // 기존 캐시가 있다면 기존 뉴스 반환
     if (cachedNews) {
       return res.json(cachedNews);
     }
