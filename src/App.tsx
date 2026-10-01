@@ -6,10 +6,10 @@ type NewsItem = {
   title: string;
   summary: string;
   category: string;
-  time: string;
   source: string;
   url: string;
   image: string | null;
+  publishedAt?: string | null;
 };
 
 const categories = [
@@ -29,13 +29,18 @@ function App() {
   const [news, setNews] = useState<NewsItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-  const [activeCategory, setActiveCategory] = useState("🔥 종합");
+  const [activeCategory, setActiveCategory] =
+    useState("🔥 종합");
 
   useEffect(() => {
-    fetch("https://today-news-oc9s.onrender.com/api/news")
+    fetch(
+      "https://today-news-oc9s.onrender.com/api/news"
+    )
       .then((response) => {
         if (!response.ok) {
-          throw new Error("뉴스를 불러오지 못했습니다.");
+          throw new Error(
+            "뉴스를 불러오지 못했습니다."
+          );
         }
 
         return response.json();
@@ -45,14 +50,13 @@ function App() {
         setLoading(false);
       })
       .catch(() => {
-        setError("뉴스를 불러오는 중 문제가 발생했습니다.");
+        setError(
+          "뉴스를 불러오는 중 문제가 발생했습니다."
+        );
         setLoading(false);
       });
   }, []);
 
-  // 종합 TOP10
-  // 여러 분야를 골고루 보여주고
-  // 같은 카테고리는 최대 2개까지만 표시
   const balancedTopNews = () => {
     const categoryOrder = [
       "정치",
@@ -67,45 +71,93 @@ function App() {
     ];
 
     const selected: NewsItem[] = [];
-    const categoryCount: Record<string, number> = {};
 
-    // 1차: 각 카테고리에서 1개씩 선택
+    const normalizeTitle = (title: string) =>
+      title
+        .toLowerCase()
+        .replace(/\[[^\]]*\]/g, " ")
+        .replace(/\([^)]*\)/g, " ")
+        .replace(/["'“”‘’…·]/g, " ")
+        .replace(/[^가-힣a-z0-9\s]/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+    const getWords = (title: string) =>
+      new Set(
+        normalizeTitle(title)
+          .split(" ")
+          .filter((word) => word.length >= 2)
+      );
+
+    const isSimilarTitle = (
+      titleA: string,
+      titleB: string
+    ) => {
+      const wordsA = getWords(titleA);
+      const wordsB = getWords(titleB);
+
+      if (
+        wordsA.size === 0 ||
+        wordsB.size === 0
+      ) {
+        return false;
+      }
+
+      let common = 0;
+
+      wordsA.forEach((word) => {
+        if (wordsB.has(word)) {
+          common += 1;
+        }
+      });
+
+      return (
+        common /
+          Math.min(
+            wordsA.size,
+            wordsB.size
+          ) >=
+        0.7
+      );
+    };
+
+    const isDuplicate = (
+      article: NewsItem
+    ) =>
+      selected.some(
+        (existing) =>
+          existing.url === article.url ||
+          isSimilarTitle(
+            existing.title,
+            article.title
+          )
+      );
+
+    // 먼저 각 분야에서 하나씩 선택
     categoryOrder.forEach((category) => {
       const article = news.find(
         (item) =>
           item.category === category &&
-          !selected.some(
-            (selectedItem) => selectedItem.id === item.id
-          )
+          !isDuplicate(item)
       );
 
-      if (article && selected.length < 10) {
+      if (
+        article &&
+        selected.length < 10
+      ) {
         selected.push(article);
-        categoryCount[category] = 1;
       }
     });
 
-    // 2차: 10개가 부족하면 추가
-    // 단, 같은 카테고리는 최대 2개
-    // 서버에서 "종합"으로 분류된 기사는 제외
+    // 부족한 자리는 전체 뉴스에서
+    // 중복되지 않는 기사로 채움
     for (const article of news) {
       if (selected.length >= 10) {
         break;
       }
 
-      if (article.category === "종합") {
-        continue;
-      }
-
-      const alreadySelected = selected.some(
-        (item) => item.id === article.id
-      );
-
-      const count = categoryCount[article.category] || 0;
-
-      if (!alreadySelected && count < 2) {
+      if (!isDuplicate(article)) {
         selected.push(article);
-        categoryCount[article.category] = count + 1;
       }
     }
 
@@ -116,13 +168,18 @@ function App() {
     activeCategory === "🔥 종합"
       ? balancedTopNews()
       : news
-          .filter((item) => item.category === activeCategory)
+          .filter(
+            (item) =>
+              item.category ===
+              activeCategory
+          )
           .slice(0, 10);
 
   return (
     <main className="news-app">
       <header className="news-header">
         <h1>오늘의 뉴스</h1>
+
         <p className="news-subtitle">
           오늘 가장 주목받는 뉴스 TOP 10
         </p>
@@ -136,9 +193,13 @@ function App() {
           <button
             key={category}
             className={`category ${
-              activeCategory === category ? "active" : ""
+              activeCategory === category
+                ? "active"
+                : ""
             }`}
-            onClick={() => setActiveCategory(category)}
+            onClick={() =>
+              setActiveCategory(category)
+            }
           >
             {category}
           </button>
@@ -155,7 +216,9 @@ function App() {
         </div>
 
         {loading && (
-          <p>뉴스를 불러오는 중입니다...</p>
+          <p>
+            뉴스를 불러오는 중입니다...
+          </p>
         )}
 
         {error && <p>{error}</p>}
@@ -164,7 +227,8 @@ function App() {
           !error &&
           filteredNews.length === 0 && (
             <p>
-              현재 해당 카테고리의 뉴스가 없습니다.
+              현재 해당 카테고리의 뉴스가
+              없습니다.
             </p>
           )}
 
@@ -172,42 +236,50 @@ function App() {
           !error &&
           filteredNews.length > 0 && (
             <div className="news-list">
-              {filteredNews.map((item, index) => (
-                <a
-                  className="news-card"
-                  key={item.id}
-                  href={item.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <div className="rank">
-                    {index + 1}
-                  </div>
-
-                  {item.image && (
-                    <img
-                      className="news-image"
-                      src={item.image}
-                      alt=""
-                      loading="lazy"
-                    />
-                  )}
-
-                  <div className="news-content">
-                    <div className="news-meta">
-                      <span>{item.category}</span>
-                      <span>·</span>
-                      <span>{item.source}</span>
+              {filteredNews.map(
+                (item, index) => (
+                  <a
+                    className="news-card"
+                    key={`${item.category}-${item.id}`}
+                    href={item.url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    <div className="rank">
+                      {index + 1}
                     </div>
 
-                    <h3>{item.title}</h3>
+                    {item.image && (
+                      <img
+                        className="news-image"
+                        src={item.image}
+                        alt=""
+                        loading="lazy"
+                      />
+                    )}
 
-                    <p>{item.summary}</p>
-                  </div>
+                    <div className="news-content">
+                      <div className="news-meta">
+                        <span>
+                          {item.category}
+                        </span>
+                        <span>·</span>
+                        <span>
+                          {item.source}
+                        </span>
+                      </div>
 
-                  <div className="arrow">›</div>
-                </a>
-              ))}
+                      <h3>{item.title}</h3>
+
+                      <p>{item.summary}</p>
+                    </div>
+
+                    <div className="arrow">
+                      ›
+                    </div>
+                  </a>
+                )
+              )}
             </div>
           )}
       </section>
