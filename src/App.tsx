@@ -33,14 +33,10 @@ function App() {
     useState("🔥 종합");
 
   useEffect(() => {
-    fetch(
-      "https://today-news-oc9s.onrender.com/api/news"
-    )
+    fetch("https://today-news-oc9s.onrender.com/api/news")
       .then((response) => {
         if (!response.ok) {
-          throw new Error(
-            "뉴스를 불러오지 못했습니다."
-          );
+          throw new Error("뉴스를 불러오지 못했습니다.");
         }
 
         return response.json();
@@ -122,9 +118,7 @@ function App() {
       );
     };
 
-    const isDuplicate = (
-      article: NewsItem
-    ) =>
+    const isDuplicate = (article: NewsItem) =>
       selected.some(
         (existing) =>
           existing.url === article.url ||
@@ -170,8 +164,7 @@ function App() {
       : news
           .filter(
             (item) =>
-              item.category ===
-              activeCategory
+              item.category === activeCategory
           )
           .slice(0, 10);
 
@@ -206,13 +199,7 @@ function App() {
 
       <section className="top-news">
         <div className="section-title">
-          <div>
-            <h1>
-              {sectionName} TOP 10
-            </h1>
-
-            <p>지금 확인할 주요 뉴스</p>
-          </div>
+          <h1>{sectionName} TOP 10</h1>
         </div>
 
         {loading && (
@@ -231,8 +218,7 @@ function App() {
           !error &&
           filteredNews.length === 0 && (
             <div className="status-box">
-              현재 해당 카테고리의 뉴스가
-              없습니다.
+              현재 해당 카테고리의 뉴스가 없습니다.
             </div>
           )}
 

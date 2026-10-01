@@ -6,22 +6,18 @@ html,
 body,
 #root {
   margin: 0;
+  padding: 0;
+
   width: 100%;
   height: 100%;
-  min-height: 100%;
+
   overflow: hidden;
+
+  background: #ffffff;
 }
 
 body {
   color: #191f28;
-
-  background:
-    linear-gradient(
-      180deg,
-      #edf5ff 0%,
-      #f3f7fb 32%,
-      #f5f6f8 100%
-    );
 
   font-family:
     -apple-system,
@@ -30,6 +26,9 @@ body {
     Roboto,
     "Noto Sans KR",
     sans-serif;
+
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
 }
 
 button {
@@ -41,17 +40,22 @@ button {
 ========================= */
 
 .news-app {
-  width: 100%;
-  max-width: 720px;
+  position: fixed;
+
+  inset: 0;
+
+  width: 100vw;
   height: 100dvh;
 
-  margin: 0 auto;
-  padding: 6px 5px 6px;
+  margin: 0;
+  padding: 2px;
 
   display: flex;
   flex-direction: column;
 
   overflow: hidden;
+
+  background: #ffffff;
 }
 
 /* =========================
@@ -61,129 +65,151 @@ button {
 .category-nav {
   flex: 0 0 auto;
 
+  width: 100%;
+
   display: grid;
-  grid-template-columns: repeat(5, 1fr);
+  grid-template-columns:
+    repeat(5, minmax(0, 1fr));
 
-  gap: 4px;
+  gap: 3px;
 
-  padding: 3px 2px 5px;
-
-  margin-bottom: 2px;
-
-  background: transparent;
+  margin: 0 0 3px;
+  padding: 0;
 }
 
-/* 기본 탭 */
-
 .category {
+  width: 100%;
   min-width: 0;
-  height: 29px;
 
-  padding: 0 3px;
+  height: 37px;
 
-  border: 1px solid rgba(214, 222, 232, 0.9);
-  border-radius: 9px;
+  margin: 0;
+  padding: 0 4px;
 
-  background: rgba(255, 255, 255, 0.68);
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
 
-  color: #6b7684;
+  background: #ffffff;
 
-  font-size: 10.5px;
-  font-weight: 720;
-  letter-spacing: -0.25px;
+  color: #111827;
+
+  font-size: 12.5px;
+  font-weight: 900;
+  letter-spacing: -0.45px;
 
   cursor: pointer;
 
   box-shadow:
-    0 1px 3px rgba(31, 45, 61, 0.025);
+    0 1px 3px rgba(31, 45, 61, 0.06);
 
   transition:
     transform 0.12s ease,
     background 0.18s ease,
     color 0.18s ease,
-    border-color 0.18s ease,
-    box-shadow 0.18s ease;
+    border-color 0.18s ease;
 }
 
 .category:active {
-  transform: scale(0.96);
+  transform: scale(0.97);
 }
 
-/* 선택된 탭 */
-
 .category.active {
-  border-color: #3182f6;
+  border-color: #1261d6;
 
   background: #3182f6;
 
   color: #ffffff;
 
-  font-weight: 850;
+  font-size: 12.8px;
+  font-weight: 950;
+
+  text-shadow:
+    0 1px 2px rgba(0, 0, 0, 0.12);
 
   box-shadow:
-    0 3px 8px rgba(49, 130, 246, 0.2);
+    0 3px 8px rgba(49, 130, 246, 0.28);
 }
 
 /* =========================
-   TOP10 영역
+   TOP10 전체
 ========================= */
 
 .top-news {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
+
+  width: 100%;
+
+  margin: 0;
+  padding: 0;
 
   display: flex;
   flex-direction: column;
 
   overflow: hidden;
+
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+
+  background: #ffffff;
 }
 
+/* =========================
+   TOP10 헤더
+========================= */
+
 .section-title {
-  flex: 0 0 31px;
+  flex: 0 0 34px;
+
+  width: 100%;
 
   display: flex;
   align-items: center;
 
-  margin: 0 5px 3px;
+  margin: 0;
+  padding: 0 9px;
+
+  border-bottom: 1px solid #dce3eb;
+
+  background: #ffffff;
 }
 
 .section-title h1 {
   margin: 0;
 
-  color: #191f28;
+  color: #080f1c;
 
-  font-size: 14px;
-  line-height: 1.1;
+  font-size: 15.5px;
+  line-height: 1;
 
-  font-weight: 850;
-  letter-spacing: -0.5px;
-}
-
-.section-title p {
-  margin: 2px 0 0;
-
-  color: #8b95a1;
-
-  font-size: 8px;
-  line-height: 1.1;
+  font-weight: 950;
+  letter-spacing: -0.7px;
 }
 
 /* =========================
-   뉴스 목록
+   뉴스 10개 영역
 ========================= */
 
 .news-list {
-  flex: 1 1 auto;
+  flex: 1 1 0;
   min-height: 0;
+
+  width: 100%;
 
   display: grid;
 
+  /* 남은 높이를 정확히 10등분 */
   grid-template-rows:
     repeat(10, minmax(0, 1fr));
 
   gap: 3px;
 
+  margin: 0;
+  padding: 3px;
+
   overflow: hidden;
+
+  background: #f7f8fa;
 }
 
 /* =========================
@@ -192,45 +218,35 @@ button {
 
 .news-card {
   width: 100%;
+  height: 100%;
   min-height: 0;
 
   display: flex;
   align-items: center;
 
-  gap: 6px;
+  gap: 8px;
 
-  padding: 2px 6px;
+  margin: 0;
+  padding: 3px 8px;
 
   overflow: hidden;
 
-  border:
-    1px solid rgba(225, 230, 236, 0.82);
-
-  border-radius: 9px;
-
-  background:
-    rgba(255, 255, 255, 0.94);
-
-  color: inherit;
-
-  text-decoration: none;
-
-  box-shadow:
-    0 2px 7px rgba(31, 45, 61, 0.035);
-
-  transition:
-    transform 0.1s ease,
-    background 0.15s ease,
-    box-shadow 0.15s ease;
-}
-
-.news-card:active {
-  transform: scale(0.995);
+  border: 1px solid #d9e0e8;
+  border-radius: 7px;
 
   background: #ffffff;
 
+  color: inherit;
+  text-decoration: none;
+
   box-shadow:
-    0 1px 3px rgba(31, 45, 61, 0.03);
+    0 1px 3px rgba(31, 45, 61, 0.045);
+}
+
+.news-card:active {
+  transform: scale(0.997);
+
+  background: #fafbfc;
 }
 
 /* =========================
@@ -238,38 +254,41 @@ button {
 ========================= */
 
 .rank {
-  width: 18px;
-  flex: 0 0 18px;
+  width: 24px;
+  flex: 0 0 24px;
 
-  color: #b0b8c1;
+  color: #445064;
 
-  font-size: 10px;
-  font-weight: 850;
+  font-size: 12.5px;
+  font-weight: 950;
 
   text-align: center;
 }
 
-/* TOP 3 */
-
 .rank-top {
-  color: #3182f6;
+  color: #1261d6;
 
-  font-size: 12px;
-  font-weight: 900;
+  font-size: 15.5px;
+  font-weight: 950;
+
+  text-shadow:
+    0 1px 4px
+    rgba(49, 130, 246, 0.18);
 }
 
 /* =========================
-   썸네일
+   이미지
 ========================= */
 
 .thumbnail {
   height: calc(100% - 4px);
+
   aspect-ratio: 1 / 1;
 
   flex: 0 0 auto;
 
-  max-width: 44px;
-  max-height: 44px;
+  max-width: 54px;
+  max-height: 54px;
 
   overflow: hidden;
 
@@ -298,44 +317,46 @@ button {
   overflow: hidden;
 }
 
-/* 카테고리 / 언론사 */
-
 .news-meta {
   display: flex;
   align-items: center;
 
-  gap: 3px;
+  gap: 4px;
 
-  margin-bottom: 1px;
+  margin: 0 0 2px;
 
   overflow: hidden;
 
-  color: #8b95a1;
+  color: #536174;
 
-  font-size: 7.5px;
-  font-weight: 650;
+  font-size: 8.5px;
+  font-weight: 750;
   line-height: 1;
 
   white-space: nowrap;
 }
 
 .news-category {
-  color: #3182f6;
+  color: #1261d6;
 
-  font-weight: 800;
+  font-weight: 950;
 }
 
 .source {
   overflow: hidden;
 
+  font-weight: 750;
+
   text-overflow: ellipsis;
 }
 
 .dot {
-  color: #d1d6db;
+  color: #aeb7c2;
 }
 
-/* 뉴스 제목 */
+/* =========================
+   뉴스 제목
+========================= */
 
 .news-content h2 {
   display: -webkit-box;
@@ -344,45 +365,52 @@ button {
 
   overflow: hidden;
 
-  color: #191f28;
+  color: #070d18;
 
-  font-size: 10.5px;
+  font-size: 13px;
   line-height: 1.16;
 
-  font-weight: 760;
-  letter-spacing: -0.2px;
+  font-weight: 900;
+  letter-spacing: -0.5px;
 
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 2;
+
+  text-wrap: pretty;
 }
 
-/* 요약 */
+/* =========================
+   요약
+========================= */
 
 .news-content p {
-  margin: 1px 0 0;
+  margin: 2px 0 0;
 
   overflow: hidden;
 
-  color: #8b95a1;
+  color: #596579;
 
-  font-size: 7.5px;
-  line-height: 1;
+  font-size: 8.5px;
+  line-height: 1.05;
+
+  font-weight: 600;
 
   white-space: nowrap;
   text-overflow: ellipsis;
 }
 
 /* =========================
-   오른쪽 화살표
+   화살표
 ========================= */
 
 .arrow {
-  width: 8px;
-  flex: 0 0 8px;
+  width: 12px;
+  flex: 0 0 12px;
 
-  color: #c5cbd1;
+  color: #8793a3;
 
-  font-size: 14px;
+  font-size: 17px;
+  font-weight: 900;
   line-height: 1;
 
   text-align: center;
@@ -393,30 +421,26 @@ button {
 ========================= */
 
 .status-box {
-  flex: 1 1 auto;
+  flex: 1 1 0;
+  min-height: 0;
+
+  width: 100%;
 
   display: flex;
   align-items: center;
   justify-content: center;
 
-  padding: 20px 10px;
+  margin: 0;
+  padding: 10px;
 
-  border:
-    1px solid rgba(225, 230, 236, 0.8);
+  background: #ffffff;
 
-  border-radius: 12px;
+  color: #596579;
 
-  background:
-    rgba(255, 255, 255, 0.88);
-
-  color: #8b95a1;
-
-  font-size: 11px;
+  font-size: 12px;
+  font-weight: 850;
 
   text-align: center;
-
-  box-shadow:
-    0 3px 12px rgba(31, 45, 61, 0.04);
 }
 
 .status-box.error {
@@ -424,58 +448,120 @@ button {
 }
 
 /* =========================
-   작은 화면
+   일반 휴대폰
 ========================= */
 
-@media (max-height: 650px) {
+@media (max-height: 700px) {
   .news-app {
-    padding-top: 3px;
-    padding-bottom: 3px;
+    padding: 1px;
   }
 
   .category-nav {
-    gap: 3px;
+    gap: 2px;
 
-    padding-top: 2px;
-    padding-bottom: 3px;
+    margin-bottom: 2px;
   }
 
   .category {
-    height: 25px;
+    height: 31px;
 
-    border-radius: 8px;
+    border-radius: 6px;
 
-    font-size: 9.5px;
+    font-size: 11.2px;
+  }
+
+  .category.active {
+    font-size: 11.4px;
+  }
+
+  .section-title {
+    flex-basis: 30px;
+
+    padding: 0 7px;
+  }
+
+  .section-title h1 {
+    font-size: 14px;
+  }
+
+  .news-list {
+    gap: 2px;
+
+    padding: 2px;
+  }
+
+  .news-card {
+    gap: 6px;
+
+    padding: 1px 5px;
+  }
+
+  .thumbnail {
+    max-width: 45px;
+    max-height: 45px;
+  }
+
+  .rank {
+    width: 20px;
+    flex-basis: 20px;
+
+    font-size: 11px;
+  }
+
+  .rank-top {
+    font-size: 13px;
+  }
+
+  .news-meta {
+    font-size: 7.5px;
+  }
+
+  .news-content h2 {
+    font-size: 11.4px;
+  }
+
+  .news-content p {
+    font-size: 7.2px;
+  }
+
+  .arrow {
+    font-size: 14px;
+  }
+}
+
+/* =========================
+   아주 낮은 화면
+========================= */
+
+@media (max-height: 580px) {
+  .category {
+    height: 27px;
+
+    font-size: 10px;
+  }
+
+  .category.active {
+    font-size: 10.2px;
   }
 
   .section-title {
     flex-basis: 27px;
-
-    margin-bottom: 2px;
   }
 
   .section-title h1 {
     font-size: 13px;
   }
 
-  .section-title p {
-    display: none;
-  }
-
-  .news-list {
-    gap: 2px;
-  }
-
-  .news-card {
-    padding-top: 1px;
-    padding-bottom: 1px;
+  .thumbnail {
+    max-width: 38px;
+    max-height: 38px;
   }
 
   .news-content h2 {
-    font-size: 10px;
+    font-size: 10.5px;
   }
 
   .news-content p {
-    font-size: 7px;
+    display: none;
   }
 }
