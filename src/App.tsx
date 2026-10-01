@@ -57,7 +57,7 @@ function App() {
       });
   }, []);
 
-  // 종합 탭에서만 중복 기사를 제거한다.
+  // 종합 탭에서만 중복 기사 제거
   const balancedTopNews = () => {
     const categoryOrder = [
       "정치",
@@ -134,7 +134,7 @@ function App() {
           )
       );
 
-    // 각 분야에서 하나씩 먼저 선택
+    // 각 분야에서 하나씩 우선 선택
     categoryOrder.forEach((category) => {
       const article = news.find(
         (item) =>
@@ -150,8 +150,7 @@ function App() {
       }
     });
 
-    // 10개가 안 되면 전체 기사에서
-    // 중복되지 않는 기사로 채운다.
+    // 부족하면 전체 뉴스에서 채우기
     for (const article of news) {
       if (selected.length >= 10) {
         break;
@@ -183,26 +182,6 @@ function App() {
 
   return (
     <main className="news-app">
-      <header className="news-header">
-        <div className="brand">
-          <div className="brand-mark">
-            <img
-              src="/logo.png"
-              alt="뉴스 TOP10"
-              className="brand-logo"
-            />
-          </div>
-
-          <div className="brand-text">
-            <h1>뉴스 TOP10</h1>
-
-            <p>
-              오늘 주목받는 뉴스를 한눈에
-            </p>
-          </div>
-        </div>
-      </header>
-
       <nav
         className="category-nav"
         aria-label="뉴스 카테고리"
@@ -228,22 +207,12 @@ function App() {
       <section className="top-news">
         <div className="section-title">
           <div>
-            <h2>
+            <h1>
               {sectionName} TOP 10
-            </h2>
+            </h1>
 
-            <p>
-              지금 확인할 주요 뉴스
-            </p>
+            <p>지금 확인할 주요 뉴스</p>
           </div>
-
-          {!loading &&
-            !error &&
-            filteredNews.length > 0 && (
-              <strong className="news-count">
-                {filteredNews.length}
-              </strong>
-            )}
         </div>
 
         {loading && (
@@ -317,7 +286,7 @@ function App() {
 
                     <div className="news-content">
                       <div className="news-meta">
-                        <span>
+                        <span className="news-category">
                           {item.category}
                         </span>
 
@@ -330,13 +299,9 @@ function App() {
                         </span>
                       </div>
 
-                      <h3>
-                        {item.title}
-                      </h3>
+                      <h2>{item.title}</h2>
 
-                      <p>
-                        {item.summary}
-                      </p>
+                      <p>{item.summary}</p>
                     </div>
 
                     <div
