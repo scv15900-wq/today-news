@@ -26,10 +26,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-/* -------------------------
-   기사 데이터 정리
-------------------------- */
-
 function makeNewsItem(article, category, id) {
   return {
     id,
@@ -42,10 +38,6 @@ function makeNewsItem(article, category, id) {
     publishedAt: article.publishedAt || null,
   };
 }
-
-/* -------------------------
-   GNews 요청
-------------------------- */
 
 async function fetchFromGNews(gnewsCategory, name) {
   const apiKey = process.env.GNEWS_API_KEY;
@@ -66,9 +58,7 @@ async function fetchFromGNews(gnewsCategory, name) {
     let response = await fetch(url);
 
     if (response.status === 429) {
-      console.log(
-        `[${name}] 요청 제한 - 5초 후 재시도`
-      );
+      console.log(`[${name}] 요청 제한 - 5초 후 재시도`);
 
       await sleep(RETRY_DELAY);
 
@@ -93,24 +83,15 @@ async function fetchFromGNews(gnewsCategory, name) {
       ? data.articles
       : [];
 
-    console.log(
-      `[${name}] ${articles.length}개 가져옴`
-    );
+    console.log(`[${name}] ${articles.length}개 가져옴`);
 
     return articles;
   } catch (error) {
-    console.error(
-      `[${name}] 요청 실패:`,
-      error.message
-    );
+    console.error(`[${name}] 요청 실패:`, error.message);
 
     return [];
   }
 }
-
-/* -------------------------
-   키워드 분류
-------------------------- */
 
 const politicalKeywords = [
   "대통령",
@@ -159,27 +140,119 @@ function containsKeyword(article, keywords) {
   );
 }
 
-function removeDuplicates(articles) {
-  const seen = new Set();
+// 제목 비교용으로 불필요한 문자 제거
+function normalizeTitle(title = "") {
+  return title
+    .toLowerCase()
+    .replace(/\[[^\]]*\]/g, " ")
+    .replace(/\([^)]*\)/g, " ")
+    .replace(/["'“”‘’…·]/g, " ")
+    .replace(/[^가-힣a-z0-9\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  return articles.filter((article) => {
-    if (!article.url) {
-      return false;
+// 제목을 핵심 단어 단위로 분리
+function getTitleWords(title = "") {
+  const normalized = normalizeTitle(title);
+
+  return new Set(
+    normalized
+      .split(" ")
+      .filter((word) => word.length >= 2)
+  );
+}
+
+// 두 제목의 핵심 단어가 얼마나 겹치는지 계산
+function titleSimilarity(titleA, titleB) {
+  const wordsA = getTitleWords(titleA);
+  const wordsB = getTitleWords(titleB);
+
+  if (wordsA.size === 0 || wordsB.size === 0) {
+    return 0;
+  }
+
+  let common = 0;
+
+  for (const word of wordsA) {
+    if (wordsB.has(word)) {
+      common += 1;
+    }
+  }
+
+  const smallerSize = Math.min(
+    wordsA.size,
+    wordsB.size
+  );
+
+  return common / smallerSize;
+}
+
+// URL 또는 제목이 비슷하면 같은 뉴스로 판단
+function isDuplicateArticle(article, usedArticles) {
+  return usedArticles.some((used) => {
+    if (
+      article.url &&
+      used.url &&
+      article.url === used.url
+    ) {
+      return true;
     }
 
-    if (seen.has(article.url)) {
-      return false;
-    }
+    const similarity = titleSimilarity(
+      article.title,
+      used.title
+    );
 
-    seen.add(article.url);
-
-    return true;
+    return similarity >= 0.7;
   });
 }
 
-/* -------------------------
-   전체 뉴스 가져오기
-------------------------- */
+function removeDuplicates(articles) {
+  const result = [];
+
+  for (const article of articles) {
+    if (!article.url) {
+      continue;
+    }
+
+    if (!isDuplicateArticle(article, result)) {
+      result.push(article);
+    }
+  }
+
+  return result;
+}
+
+// 한 기사를 하나의 카테고리에만 배정
+function takeUniqueArticles(
+  candidates,
+  usedArticles,
+  max = 10
+) {
+  const selected = [];
+
+  for (const article of candidates) {
+    if (selected.length >= max) {
+      break;
+    }
+
+    if (
+      isDuplicateArticle(
+        article,
+        [...usedArticles, ...selected]
+      )
+    ) {
+      continue;
+    }
+
+    selected.push(article);
+  }
+
+  usedArticles.push(...selected);
+
+  return selected;
+}
 
 async function getNews() {
   if (!process.env.GNEWS_API_KEY) {
@@ -187,11 +260,6 @@ async function getNews() {
       "GNEWS_API_KEY가 설정되지 않았습니다."
     );
   }
-
-  /*
-    general을 추가해서 정치/사회 후보 기사도 확보한다.
-    모든 요청은 동시에 보내지 않고 순서대로 보낸다.
-  */
 
   const categoryRequests = [
     {
@@ -230,16 +298,10 @@ async function getNews() {
 
   const collected = {};
 
-  for (
-    let i = 0;
-    i < categoryRequests.length;
-    i++
-  ) {
+  for (let i = 0; i < categoryRequests.length; i++) {
     const request = categoryRequests[i];
 
-    console.log(
-      `[${request.app}] 뉴스 요청 중...`
-    );
+    console.log(`[${request.app}] 뉴스 요청 중...`);
 
     collected[request.app] =
       await fetchFromGNews(
@@ -252,34 +314,92 @@ async function getNews() {
     }
   }
 
-  /*
-    정치/사회는 general을 중심으로,
-    다른 분야 기사까지 함께 살펴본다.
-  */
-
   const allArticles = removeDuplicates(
     Object.values(collected).flat()
   );
 
-  const politicalArticles =
-    allArticles
-      .filter((article) =>
-        containsKeyword(
-          article,
-          politicalKeywords
-        )
+  const politicalCandidates =
+    allArticles.filter((article) =>
+      containsKeyword(
+        article,
+        politicalKeywords
       )
-      .slice(0, 10);
+    );
+
+  const societyCandidates =
+    allArticles.filter((article) =>
+      containsKeyword(
+        article,
+        societyKeywords
+      )
+    );
+
+  // 먼저 정치/사회 후보를 잡고,
+  // 이후 다른 카테고리에서는 이미 사용된 기사를 제외한다.
+  const usedArticles = [];
+
+  const politicalArticles =
+    takeUniqueArticles(
+      politicalCandidates,
+      usedArticles,
+      10
+    );
 
   const societyArticles =
-    allArticles
-      .filter((article) =>
-        containsKeyword(
-          article,
-          societyKeywords
-        )
-      )
-      .slice(0, 10);
+    takeUniqueArticles(
+      societyCandidates,
+      usedArticles,
+      10
+    );
+
+  const economyArticles =
+    takeUniqueArticles(
+      collected["경제"] || [],
+      usedArticles,
+      10
+    );
+
+  const itArticles =
+    takeUniqueArticles(
+      collected["IT"] || [],
+      usedArticles,
+      10
+    );
+
+  const worldArticles =
+    takeUniqueArticles(
+      collected["국제"] || [],
+      usedArticles,
+      10
+    );
+
+  const sportsArticles =
+    takeUniqueArticles(
+      collected["스포츠"] || [],
+      usedArticles,
+      10
+    );
+
+  const entertainmentArticles =
+    takeUniqueArticles(
+      collected["연예"] || [],
+      usedArticles,
+      10
+    );
+
+  const scienceArticles =
+    takeUniqueArticles(
+      collected["과학"] || [],
+      usedArticles,
+      10
+    );
+
+  const lifeArticles =
+    takeUniqueArticles(
+      collected["생활"] || [],
+      usedArticles,
+      10
+    );
 
   const finalCategories = [
     {
@@ -288,7 +408,7 @@ async function getNews() {
     },
     {
       name: "경제",
-      articles: collected["경제"] || [],
+      articles: economyArticles,
     },
     {
       name: "사회",
@@ -296,27 +416,27 @@ async function getNews() {
     },
     {
       name: "IT",
-      articles: collected["IT"] || [],
+      articles: itArticles,
     },
     {
       name: "국제",
-      articles: collected["국제"] || [],
+      articles: worldArticles,
     },
     {
       name: "스포츠",
-      articles: collected["스포츠"] || [],
+      articles: sportsArticles,
     },
     {
       name: "연예",
-      articles: collected["연예"] || [],
+      articles: entertainmentArticles,
     },
     {
       name: "과학",
-      articles: collected["과학"] || [],
+      articles: scienceArticles,
     },
     {
       name: "생활",
-      articles: collected["생활"] || [],
+      articles: lifeArticles,
     },
   ];
 
@@ -324,11 +444,7 @@ async function getNews() {
   let id = 1;
 
   for (const category of finalCategories) {
-    const articles = removeDuplicates(
-      category.articles
-    ).slice(0, 10);
-
-    for (const article of articles) {
+    for (const article of category.articles) {
       news.push(
         makeNewsItem(
           article,
@@ -344,28 +460,16 @@ async function getNews() {
   console.log("----------------------");
 
   for (const category of finalCategories) {
-    const count = news.filter(
-      (item) =>
-        item.category === category.name
-    ).length;
-
     console.log(
-      `${category.name}: ${count}개`
+      `${category.name}: ${category.articles.length}개`
     );
   }
 
-  console.log(
-    `전체 뉴스: ${news.length}개`
-  );
-
+  console.log(`전체 뉴스: ${news.length}개`);
   console.log("----------------------");
 
   return news;
 }
-
-/* -------------------------
-   API
-------------------------- */
 
 app.get("/api/news", async (req, res) => {
   try {
@@ -398,10 +502,7 @@ app.get("/api/news", async (req, res) => {
         "현재 뉴스 데이터를 가져올 수 없습니다.",
     });
   } catch (error) {
-    console.error(
-      "뉴스 서버 오류:",
-      error
-    );
+    console.error("뉴스 서버 오류:", error);
 
     if (cachedNews) {
       return res.json(cachedNews);
@@ -414,10 +515,6 @@ app.get("/api/news", async (req, res) => {
   }
 });
 
-/* -------------------------
-   React 앱
-------------------------- */
-
 app.use((req, res) => {
   res.sendFile(
     path.join(
@@ -428,16 +525,6 @@ app.use((req, res) => {
   );
 });
 
-/* -------------------------
-   서버 시작
-------------------------- */
-
-app.listen(
-  PORT,
-  "0.0.0.0",
-  () => {
-    console.log(
-      `뉴스 서버 실행: ${PORT}`
-    );
-  }
-);
+app.listen(PORT, "0.0.0.0", () => {
+  console.log(`뉴스 서버 실행: ${PORT}`);
+});
