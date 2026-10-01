@@ -172,14 +172,14 @@ async function getNews() {
   */
 
   const requests = [
-    {
-      name: "정치",
-      load: () =>
-        fetchSearch(
-          "정치 OR 대통령 OR 국회 OR 정부 OR 정당",
-          "정치"
-        ),
-    },
+   {
+  name: "정치",
+  load: () =>
+    fetchSearch(
+      "정치",
+      "정치"
+    ),
+},
 
     {
       name: "경제",
