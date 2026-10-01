@@ -161,6 +161,54 @@ const societyKeywords = [
   "사회",
 ];
 
+// 생활 뉴스 키워드
+const lifeKeywords = [
+  "날씨",
+  "기온",
+  "비",
+  "눈",
+  "폭염",
+  "한파",
+  "태풍",
+  "미세먼지",
+  "황사",
+  "건강",
+  "질병",
+  "감염",
+  "독감",
+  "코로나",
+  "백신",
+  "병원",
+  "의료",
+  "식품",
+  "음식",
+  "먹거리",
+  "요리",
+  "외식",
+  "여행",
+  "관광",
+  "축제",
+  "문화",
+  "공연",
+  "전시",
+  "영화",
+  "교통",
+  "지하철",
+  "버스",
+  "철도",
+  "고속도로",
+  "주택",
+  "주거",
+  "아파트",
+  "부동산",
+  "물가",
+  "가격",
+  "소비",
+  "할인",
+  "마트",
+  "생활",
+];
+
 function containsKeyword(article, keywords) {
   const text = [
     article.title || "",
@@ -174,8 +222,7 @@ function containsKeyword(article, keywords) {
   );
 }
 
-// 정치/사회 안에서 완전히 같은 URL만 제거.
-// 제목 유사도 제거는 하지 않아서 기사 수를 최대한 유지한다.
+// 키워드 분류 카테고리는 완전히 같은 URL만 제거한다.
 function removeExactDuplicates(articles) {
   const result = [];
   const urls = new Set();
@@ -234,14 +281,12 @@ async function getNews() {
     },
     {
       gnews: "health",
-      app: "생활",
+      app: "생활후보",
     },
   ];
 
   const collected = {};
 
-  // 동시에 요청하지 않고 순서대로 요청해서
-  // GNews 요청 제한 가능성을 줄인다.
   for (
     let i = 0;
     i < categoryRequests.length;
@@ -259,15 +304,11 @@ async function getNews() {
         request.app
       );
 
-    if (
-      i <
-      categoryRequests.length - 1
-    ) {
+    if (i < categoryRequests.length - 1) {
       await sleep(REQUEST_DELAY);
     }
   }
 
-  // 정치와 사회는 전체 기사 후보에서 분류한다.
   const allArticles =
     Object.values(collected).flat();
 
@@ -291,19 +332,24 @@ async function getNews() {
       )
     ).slice(0, 10);
 
-  /*
-   * 중요:
-   * 경제/IT/국제/스포츠/연예/과학/생활은
-   * 유사 제목 중복 제거를 하지 않는다.
-   *
-   * GNews가 내려준 최대 10개를 그대로 사용해서
-   * 중복 제거 때문에 7~9개로 줄어드는 일을 막는다.
-   *
-   * 서로 다른 카테고리끼리 같은 기사가
-   * 등장하는 것도 허용한다.
-   *
-   * 종합 탭의 중복 제거는 App.tsx에서만 한다.
-   */
+  // 생활 관련 기사를 전체 뉴스에서 찾는다.
+  const lifeKeywordArticles =
+    removeExactDuplicates(
+      allArticles.filter((article) =>
+        containsKeyword(
+          article,
+          lifeKeywords
+        )
+      )
+    );
+
+  // health에서 받아온 기사도 생활 후보에 포함한다.
+  const lifeArticles =
+    removeExactDuplicates([
+      ...lifeKeywordArticles,
+      ...(collected["생활후보"] || []),
+    ]).slice(0, 10);
+
   const finalCategories = [
     {
       name: "정치",
@@ -351,9 +397,7 @@ async function getNews() {
     },
     {
       name: "생활",
-      articles: (
-        collected["생활"] || []
-      ).slice(0, 10),
+      articles: lifeArticles,
     },
   ];
 
