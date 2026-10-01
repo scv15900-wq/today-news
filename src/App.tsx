@@ -9,9 +9,21 @@ type NewsItem = {
   time: string;
   source: string;
   url: string;
+  image: string | null;
 };
 
-const categories = ["🔥 종합", "경제", "사회", "IT", "국제"];
+const categories = [
+  "🔥 종합",
+  "정치",
+  "경제",
+  "사회",
+  "IT",
+  "국제",
+  "스포츠",
+  "연예",
+  "과학",
+  "생활",
+];
 
 function App() {
   const [news, setNews] = useState<NewsItem[]>([]);
@@ -39,9 +51,11 @@ function App() {
   }, []);
 
   const filteredNews =
-    activeCategory === "🔥 종합"
-      ? news
-      : news.filter((item) => item.category === activeCategory);
+  activeCategory === "🔥 종합"
+    ? news.slice(0, 10)
+    : news
+        .filter((item) => item.category === activeCategory)
+        .slice(0, 10);
 
   return (
     <main className="news-app">
@@ -90,15 +104,22 @@ function App() {
                 rel="noopener noreferrer"
               >
                 <div className="rank">{index + 1}</div>
+                
+                {item.image && (
+                  <img
+                    className="news-image"
+                    src={item.image}
+                    alt=""
+                    loading="lazy"
+                   />
+                )}
 
                 <div className="news-content">
-                  <div className="news-meta">
-                    <span>{item.category}</span>
-                    <span>·</span>
-                    <span>{item.time}</span>
-                    <span>·</span>
-                    <span>{item.source}</span>
-                  </div>
+                     <div className="news-meta">
+                          <span>{item.category}</span>
+                          <span>·</span>
+                          <span>{item.source}</span>
+                     </div>
 
                   <h3>{item.title}</h3>
                   <p>{item.summary}</p>

@@ -13,7 +13,6 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-
 app.use(express.static(path.join(__dirname, "dist")));
 
 let cachedNews = null;
@@ -22,56 +21,109 @@ let cachedAt = 0;
 const CACHE_TIME = 30 * 60 * 1000;
 
 function formatTime(publishedAt) {
+  if (!publishedAt) {
+    return "시간 정보 없음";
+  }
+
   const published = new Date(publishedAt);
-  const now = new Date();
-  const diffMinutes = Math.floor((now - published) / 60000);
 
-  if (diffMinutes < 60) {
-    return `${Math.max(diffMinutes, 1)}분 전`;
+  if (Number.isNaN(published.getTime())) {
+    return "시간 정보 없음";
   }
 
-  const diffHours = Math.floor(diffMinutes / 60);
-
-  if (diffHours < 24) {
-    return `${diffHours}시간 전`;
-  }
-
-  return `${Math.floor(diffHours / 24)}일 전`;
+  return published.toLocaleString("ko-KR", {
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
 }
 
 function getCategory(article) {
-  const text = `${article.title || ""} ${article.description || ""}`.toLowerCase();
+  const text =
+    `${article.title || ""} ${article.description || ""}`.toLowerCase();
 
+  // 정치
   if (
-    /ai|인공지능|반도체|삼성|애플|구글|마이크로소프트|테크|it|컴퓨터|스마트폰|로봇|소프트웨어/.test(
+    /정치|대통령|국회|여당|야당|선거|총선|대선|정당|국무|정부|장관|의원|공천|탄핵|법안/.test(
       text,
     )
   ) {
-    return "IT";
+    return "정치";
   }
 
+  // 경제
   if (
-    /경제|증시|주식|코스피|코스닥|금리|은행|대출|부동산|아파트|기업|채권|환율|원화|달러|물가/.test(
+    /경제|증시|주식|코스피|코스닥|금리|은행|대출|부동산|아파트|기업|채권|환율|원화|달러|물가|투자|재테크|금융/.test(
       text,
     )
   ) {
     return "경제";
   }
 
+  // IT
   if (
-    /미국|중국|일본|북한|러시아|우크라이나|유럽|이스라엘|이란|유엔|트럼프|시진핑|국제/.test(
+    /ai|인공지능|반도체|삼성|애플|구글|마이크로소프트|테크|it|컴퓨터|스마트폰|로봇|소프트웨어|갤럭시|아이폰|챗gpt|오픈ai/.test(
+      text,
+    )
+  ) {
+    return "IT";
+  }
+
+  // 국제
+  if (
+    /미국|중국|일본|북한|러시아|우크라이나|유럽|이스라엘|이란|유엔|트럼프|시진핑|국제|외교|전쟁|중동|나토/.test(
       text,
     )
   ) {
     return "국제";
   }
 
+  // 스포츠
   if (
-    /사회|경찰|검찰|법원|사건|사고|교육|학교|병원|복지|노동|범죄|재판/.test(
+    /스포츠|축구|야구|농구|배구|골프|손흥민|김민재|이강인|류현진|월드컵|올림픽|프로야구|k리그|경기|선수|감독/.test(
+      text,
+    )
+  ) {
+    return "스포츠";
+  }
+
+  // 연예
+  if (
+    /연예|배우|가수|아이돌|방탄소년단|bts|블랙핑크|드라마|영화|예능|콘서트|앨범|음원|배우|스타|연예인/.test(
+      text,
+    )
+  ) {
+    return "연예";
+  }
+
+  // 과학
+  if (
+    /과학|우주|나사|NASA|천문|연구|실험|바이오|유전자|의학|신약|기후|지구|생명|물리|화학|과학기술/.test(
+      text,
+    )
+  ) {
+    return "과학";
+  }
+
+  // 사회
+  if (
+    /사회|경찰|검찰|법원|사건|사고|교육|학교|병원|복지|노동|범죄|재판|안전|소방|교통/.test(
       text,
     )
   ) {
     return "사회";
+  }
+
+  // 생활
+  if (
+    /생활|건강|여행|맛집|음식|날씨|주거|육아|쇼핑|문화|패션|자동차|반려동물|취미/.test(
+      text,
+    )
+  ) {
+    return "생활";
   }
 
   return "종합";
@@ -86,7 +138,7 @@ async function getNews() {
 
   const url =
     `https://gnews.io/api/v4/top-headlines` +
-    `?country=kr&lang=ko&max=10&apikey=${apiKey}`;
+    `?country=kr&lang=ko&max=100&apikey=${apiKey}`;
 
   const response = await fetch(url);
 
@@ -99,17 +151,22 @@ async function getNews() {
   }
 
   const data = await response.json();
+
   const articles = Array.isArray(data.articles) ? data.articles : [];
 
-  return articles.slice(0, 10).map((article, index) => ({
+  const news = articles.map((article, index) => ({
     id: index + 1,
     title: article.title || "제목 없음",
     summary: article.description || "요약 정보가 없습니다.",
     category: getCategory(article),
     time: formatTime(article.publishedAt),
+    publishedAt: article.publishedAt || null,
     source: article.source?.name || "뉴스 출처",
     url: article.url,
+    image: article.image || null,
   }));
+
+  return news;
 }
 
 app.get("/api/news", async (req, res) => {
