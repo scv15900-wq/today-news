@@ -18,7 +18,7 @@ app.use(express.static(path.join(__dirname, "dist")));
 let cachedNews = null;
 let cachedAt = 0;
 
-const CACHE_TIME = 30 * 60 * 1000;
+const CACHE_TIME = 3 * 60 * 60 * 1000;
 const REQUEST_DELAY = 1500;
 const RETRY_DELAY = 5000;
 
