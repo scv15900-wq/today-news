@@ -12,14 +12,22 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 3000;
 
-const GNEWS_API_KEY =
-  process.env.GNEWS_API_KEY;
+const GNEWS_API_KEY = process.env.GNEWS_API_KEY;
+const SUPABASE_URL = process.env.SUPABASE_URL;
+const SUPABASE_SECRET_KEY = process.env.SUPABASE_SECRET_KEY;
 
-const SUPABASE_URL =
-  process.env.SUPABASE_URL;
+/* =========================
+   기본 설정
+========================= */
 
-const SUPABASE_SECRET_KEY =
-  process.env.SUPABASE_SECRET_KEY;
+const REFRESH_TIME = 3 * 60 * 60 * 1000;
+const REQUEST_DELAY = 1500;
+const RETRY_DELAY = 5000;
+
+let cachedNews = [];
+let lastSuccessfulRefresh = null;
+let isRefreshing = false;
+let refreshTimer = null;
 
 /* =========================
    Supabase 연결
@@ -27,10 +35,7 @@ const SUPABASE_SECRET_KEY =
 
 let supabase = null;
 
-if (
-  SUPABASE_URL &&
-  SUPABASE_SECRET_KEY
-) {
+if (SUPABASE_URL && SUPABASE_SECRET_KEY) {
   supabase = createClient(
     SUPABASE_URL,
     SUPABASE_SECRET_KEY,
@@ -44,37 +49,11 @@ if (
 
   console.log("Supabase 연결 준비 완료");
 } else {
-  console.warn(
-    "Supabase 환경변수가 없습니다."
-  );
+  console.warn("Supabase 환경변수가 없습니다.");
 }
 
 /* =========================
-   뉴스 캐시
-========================= */
-
-let cachedNews = [];
-
-let isRefreshing = false;
-
-/*
-  3시간마다 뉴스 갱신
-*/
-const REFRESH_TIME =
-  3 * 60 * 60 * 1000;
-
-/*
-  GNews 요청 사이 간격
-*/
-const REQUEST_DELAY = 1500;
-
-/*
-  429 발생 시 재시도 대기
-*/
-const RETRY_DELAY = 5000;
-
-/* =========================
-   카테고리 설정
+   GNews 카테고리
 ========================= */
 
 const gnewsCategories = [
@@ -237,74 +216,145 @@ const lifeKeywords = [
 ========================= */
 
 const sleep = (ms) =>
-  new Promise((resolve) =>
-    setTimeout(resolve, ms)
-  );
+  new Promise((resolve) => setTimeout(resolve, ms));
 
-function containsKeyword(
-  article,
-  keywords
-) {
+function containsKeyword(article, keywords) {
   const text = `
     ${article.title || ""}
     ${article.summary || ""}
   `.toLowerCase();
 
   return keywords.some((keyword) =>
-    text.includes(
-      keyword.toLowerCase()
-    )
+    text.includes(keyword.toLowerCase())
   );
 }
 
-/*
-  완전히 같은 URL 기사 제거
-*/
-function removeExactDuplicates(
-  articles
-) {
+function removeExactDuplicates(articles) {
   const seen = new Set();
 
   return articles.filter((article) => {
-    if (!article.url) {
-      return true;
-    }
+    const key =
+      article.url ||
+      `${article.title || ""}-${article.source || ""}`;
 
-    if (seen.has(article.url)) {
+    if (seen.has(key)) {
       return false;
     }
 
-    seen.add(article.url);
-
+    seen.add(key);
     return true;
   });
+}
+
+/* =========================
+   기존 카테고리 뉴스
+========================= */
+
+function getOldCategoryNews(category) {
+  return cachedNews
+    .filter(
+      (article) =>
+        article.category === category
+    )
+    .slice(0, 10);
+}
+
+/* =========================
+   새 뉴스 + 기존 뉴스
+
+   새 뉴스 우선
+   부족한 만큼 기존 뉴스 사용
+   중복 제거
+   최대 10개
+========================= */
+
+function mergeWithOldNews(
+  category,
+  newArticles
+) {
+  const oldArticles =
+    getOldCategoryNews(category);
+
+  const combined = [
+    ...(Array.isArray(newArticles)
+      ? newArticles
+      : []),
+    ...oldArticles,
+  ];
+
+  const seen = new Set();
+  const result = [];
+
+  for (const article of combined) {
+    if (result.length >= 10) {
+      break;
+    }
+
+    const key =
+      article.url ||
+      `${article.title || ""}-${article.source || ""}`;
+
+    if (seen.has(key)) {
+      continue;
+    }
+
+    seen.add(key);
+
+    result.push({
+      title:
+        article.title || "제목 없음",
+
+      summary:
+        article.summary || "",
+
+      source:
+        article.source || "출처 없음",
+
+      url:
+        article.url || "#",
+
+      image:
+        article.image || null,
+
+      publishedAt:
+        article.publishedAt || null,
+    });
+  }
+
+  return result;
 }
 
 /* =========================
    GNews 호출
 ========================= */
 
-async function fetchFromGNews(
-  gnewsCategory
-) {
+async function fetchFromGNews(gnewsCategory) {
+  if (!GNEWS_API_KEY) {
+    console.error(
+      "GNEWS_API_KEY가 없습니다."
+    );
+
+    return {
+      success: false,
+      articles: [],
+    };
+  }
+
   const url =
     "https://gnews.io/api/v4/top-headlines" +
-    `?category=${encodeURIComponent(
-      gnewsCategory
-    )}` +
+    `?category=${encodeURIComponent(gnewsCategory)}` +
     "&lang=ko" +
     "&country=kr" +
     "&max=10" +
-    `&apikey=${encodeURIComponent(
-      GNEWS_API_KEY
-    )}`;
+    `&apikey=${encodeURIComponent(GNEWS_API_KEY)}`;
 
   try {
     let response = await fetch(url);
 
     /*
-      429일 경우 한 번 기다렸다 재시도
+      429일 때만 1회 재시도
     */
+
     if (response.status === 429) {
       console.log(
         `GNews 429 발생: ${gnewsCategory}`
@@ -320,56 +370,73 @@ async function fetchFromGNews(
         await response.text();
 
       console.error(
-        `GNews 오류 ${response.status}`,
+        `GNews 오류 ${response.status}: ${gnewsCategory}`,
         errorText
       );
 
-      return [];
+      return {
+        success: false,
+        articles: [],
+      };
     }
 
     const data =
       await response.json();
 
-    if (
-      !Array.isArray(data.articles)
-    ) {
-      return [];
+    if (!Array.isArray(data.articles)) {
+      console.error(
+        `GNews 응답 형식 오류: ${gnewsCategory}`
+      );
+
+      return {
+        success: false,
+        articles: [],
+      };
     }
 
-    return data.articles.map(
-      (article) => ({
-        title:
-          article.title ||
-          "제목 없음",
+    const articles =
+      data.articles.map(
+        (article) => ({
+          title:
+            article.title ||
+            "제목 없음",
 
-        summary:
-          article.description ||
-          "",
+          summary:
+            article.description ||
+            "",
 
-        source:
-          article.source?.name ||
-          "출처 없음",
+          source:
+            article.source?.name ||
+            "출처 없음",
 
-        url:
-          article.url ||
-          "#",
+          url:
+            article.url ||
+            "#",
 
-        image:
-          article.image ||
-          null,
+          image:
+            article.image ||
+            null,
 
-        publishedAt:
-          article.publishedAt ||
-          null,
-      })
-    );
+          publishedAt:
+            article.publishedAt ||
+            null,
+        })
+      );
+
+    return {
+      success: true,
+      articles,
+    };
   } catch (error) {
     console.error(
       `GNews 요청 실패: ${gnewsCategory}`,
       error
     );
 
-    return [];
+    return {
+      success: false,
+      articles: [],
+    };
   }
 }
 
@@ -377,9 +444,7 @@ async function fetchFromGNews(
    Supabase 저장
 ========================= */
 
-async function saveNewsToSupabase(
-  news
-) {
+async function saveNewsToSupabase(news) {
   if (!supabase) {
     return false;
   }
@@ -390,6 +455,9 @@ async function saveNewsToSupabase(
   ) {
     return false;
   }
+
+  const updatedAt =
+    new Date().toISOString();
 
   try {
     const { error } =
@@ -404,7 +472,7 @@ async function saveNewsToSupabase(
               news,
 
             updated_at:
-              new Date().toISOString(),
+              updatedAt,
           },
           {
             onConflict:
@@ -421,8 +489,15 @@ async function saveNewsToSupabase(
       return false;
     }
 
+    lastSuccessfulRefresh =
+      updatedAt;
+
     console.log(
       `Supabase 뉴스 저장 완료 (${news.length}개)`
+    );
+
+    console.log(
+      `마지막 정상 저장: ${updatedAt}`
     );
 
     return true;
@@ -442,14 +517,14 @@ async function saveNewsToSupabase(
 
 async function loadNewsFromSupabase() {
   if (!supabase) {
-    return [];
+    return {
+      news: [],
+      updatedAt: null,
+    };
   }
 
   try {
-    const {
-      data,
-      error,
-    } =
+    const { data, error } =
       await supabase
         .from("news_cache")
         .select(
@@ -467,7 +542,10 @@ async function loadNewsFromSupabase() {
         error.message
       );
 
-      return [];
+      return {
+        news: [],
+        updatedAt: null,
+      };
     }
 
     if (
@@ -481,7 +559,10 @@ async function loadNewsFromSupabase() {
         "Supabase에 저장된 뉴스가 없습니다."
       );
 
-      return [];
+      return {
+        news: [],
+        updatedAt: null,
+      };
     }
 
     console.log(
@@ -492,15 +573,142 @@ async function loadNewsFromSupabase() {
       `마지막 저장 시간: ${data.updated_at}`
     );
 
-    return data.news_data;
+    return {
+      news:
+        data.news_data,
+
+      updatedAt:
+        data.updated_at ||
+        null,
+    };
   } catch (error) {
     console.error(
       "Supabase 복구 중 오류:",
       error
     );
 
-    return [];
+    return {
+      news: [],
+      updatedAt: null,
+    };
   }
+}
+
+/* =========================
+   캐시 시간 확인
+========================= */
+
+function isCacheFresh() {
+  if (!lastSuccessfulRefresh) {
+    return false;
+  }
+
+  const savedTime =
+    new Date(
+      lastSuccessfulRefresh
+    ).getTime();
+
+  if (!Number.isFinite(savedTime)) {
+    return false;
+  }
+
+  const age =
+    Date.now() - savedTime;
+
+  return (
+    age >= 0 &&
+    age < REFRESH_TIME
+  );
+}
+
+function getNextRefreshDelay() {
+  if (!lastSuccessfulRefresh) {
+    return 0;
+  }
+
+  const savedTime =
+    new Date(
+      lastSuccessfulRefresh
+    ).getTime();
+
+  if (!Number.isFinite(savedTime)) {
+    return 0;
+  }
+
+  return Math.max(
+    0,
+    savedTime +
+      REFRESH_TIME -
+      Date.now()
+  );
+}
+
+/* =========================
+   최종 뉴스 배열
+========================= */
+
+function buildFinalNews(categoryMap) {
+  const finalNews = [];
+
+  let id = 1;
+
+  const categoryOrder = [
+    "종합",
+    "정치",
+    "경제",
+    "사회",
+    "IT",
+    "국제",
+    "스포츠",
+    "연예",
+    "과학",
+    "생활",
+  ];
+
+  for (const category of categoryOrder) {
+    const articles =
+      categoryMap[category] ||
+      [];
+
+    articles
+      .slice(0, 10)
+      .forEach(
+        (article) => {
+          finalNews.push({
+            id,
+
+            title:
+              article.title,
+
+            summary:
+              article.summary ||
+              "",
+
+            category,
+
+            source:
+              article.source ||
+              "출처 없음",
+
+            url:
+              article.url ||
+              "#",
+
+            image:
+              article.image ||
+              null,
+
+            publishedAt:
+              article.publishedAt ||
+              null,
+          });
+
+          id += 1;
+        }
+      );
+  }
+
+  return finalNews;
 }
 
 /* =========================
@@ -513,7 +721,7 @@ async function refreshNews() {
       "이미 뉴스 갱신 중입니다."
     );
 
-    return;
+    return false;
   }
 
   isRefreshing = true;
@@ -525,10 +733,15 @@ async function refreshNews() {
   try {
     const collected = {};
 
+    let successCount = 0;
+
     /*
-      GNews 무료 요청 제한을 고려해
-      순차적으로 호출
+      GNews 8개 카테고리 순차 요청
+
+      하나가 실패해도
+      다른 카테고리는 계속 시도
     */
+
     for (
       let i = 0;
       i < gnewsCategories.length;
@@ -541,19 +754,23 @@ async function refreshNews() {
         `GNews 요청: ${item.gnewsCategory}`
       );
 
-      const articles =
+      const result =
         await fetchFromGNews(
           item.gnewsCategory
         );
 
-      collected[
-        item.category
-      ] = articles;
+      collected[item.category] = {
+        success:
+          result.success,
 
-      /*
-        마지막 요청 이후에는
-        기다릴 필요 없음
-      */
+        articles:
+          result.articles,
+      };
+
+      if (result.success) {
+        successCount += 1;
+      }
+
       if (
         i <
         gnewsCategories.length - 1
@@ -565,65 +782,59 @@ async function refreshNews() {
     }
 
     /*
-      가져온 모든 후보 기사
+      전부 실패했다면
+      기존 데이터 그대로 유지
     */
-    const allArticles = [
-      ...(collected[
-        "종합후보"
-      ] || []),
 
-      ...(collected[
-        "경제"
-      ] || []),
+    if (successCount === 0) {
+      console.log(
+        "모든 GNews 요청이 실패했습니다."
+      );
 
-      ...(collected[
-        "IT"
-      ] || []),
+      console.log(
+        "기존 저장 뉴스를 그대로 유지합니다."
+      );
 
-      ...(collected[
-        "국제"
-      ] || []),
+      return false;
+    }
 
-      ...(collected[
-        "스포츠"
-      ] || []),
-
-      ...(collected[
-        "연예"
-      ] || []),
-
-      ...(collected[
-        "과학"
-      ] || []),
-
-      ...(collected[
-        "생활후보"
-      ] || []),
-    ];
+    console.log(
+      `GNews 성공: ${successCount}/${gnewsCategories.length}`
+    );
 
     /*
-      아무 뉴스도 못 가져온 경우
-      기존 캐시는 절대 지우지 않음
+      성공한 요청의 기사만 모음
     */
-    if (allArticles.length === 0) {
-      console.log(
-        "새 뉴스를 가져오지 못했습니다."
-      );
 
-      console.log(
-        "기존 저장 뉴스를 유지합니다."
-      );
+    const successfulArticles = [];
 
-      return;
+    for (
+      const item of gnewsCategories
+    ) {
+      const result =
+        collected[
+          item.category
+        ];
+
+      if (
+        result?.success &&
+        Array.isArray(
+          result.articles
+        )
+      ) {
+        successfulArticles.push(
+          ...result.articles
+        );
+      }
     }
 
     /* =====================
-       정치
+       정치 새 뉴스
     ===================== */
 
-    const politicalArticles =
+    const newPolitical =
       removeExactDuplicates(
-        allArticles.filter(
+        successfulArticles.filter(
           (article) =>
             containsKeyword(
               article,
@@ -633,12 +844,12 @@ async function refreshNews() {
       ).slice(0, 10);
 
     /* =====================
-       사회
+       사회 새 뉴스
     ===================== */
 
-    const societyArticles =
+    const newSociety =
       removeExactDuplicates(
-        allArticles.filter(
+        successfulArticles.filter(
           (article) =>
             containsKeyword(
               article,
@@ -648,12 +859,12 @@ async function refreshNews() {
       ).slice(0, 10);
 
     /* =====================
-       생활
+       생활 새 뉴스
     ===================== */
 
-    const lifeKeywordArticles =
+    const newLifeKeywords =
       removeExactDuplicates(
-        allArticles.filter(
+        successfulArticles.filter(
           (article) =>
             containsKeyword(
               article,
@@ -662,108 +873,186 @@ async function refreshNews() {
         )
       );
 
-    const lifeArticles =
+    const healthResult =
+      collected[
+        "생활후보"
+      ];
+
+    const newLife =
       removeExactDuplicates([
-        ...lifeKeywordArticles,
-        ...(collected[
-          "생활후보"
-        ] || []),
+        ...newLifeKeywords,
+
+        ...(
+          healthResult?.success
+            ? healthResult.articles
+            : []
+        ),
       ]).slice(0, 10);
 
     /* =====================
-       최종 뉴스 생성
+       직접 카테고리 결과
     ===================== */
 
-    const finalNews = [];
+    const generalResult =
+      collected[
+        "종합후보"
+      ];
 
-    let id = 1;
+    const economyResult =
+      collected[
+        "경제"
+      ];
 
-    const addCategory = (
-      category,
-      articles
-    ) => {
-      articles
-        .slice(0, 10)
-        .forEach(
-          (article) => {
-            finalNews.push({
-              id,
-              title:
-                article.title,
-              summary:
-                article.summary,
-              category,
-              source:
-                article.source,
-              url:
-                article.url,
-              image:
-                article.image,
-              publishedAt:
-                article.publishedAt,
-            });
+    const itResult =
+      collected[
+        "IT"
+      ];
 
-            id += 1;
-          }
-        );
+    const worldResult =
+      collected[
+        "국제"
+      ];
+
+    const sportsResult =
+      collected[
+        "스포츠"
+      ];
+
+    const entertainmentResult =
+      collected[
+        "연예"
+      ];
+
+    const scienceResult =
+      collected[
+        "과학"
+      ];
+
+    const newGeneral =
+      generalResult?.success
+        ? generalResult.articles
+        : [];
+
+    const newEconomy =
+      economyResult?.success
+        ? economyResult.articles
+        : [];
+
+    const newIT =
+      itResult?.success
+        ? itResult.articles
+        : [];
+
+    const newWorld =
+      worldResult?.success
+        ? worldResult.articles
+        : [];
+
+    const newSports =
+      sportsResult?.success
+        ? sportsResult.articles
+        : [];
+
+    const newEntertainment =
+      entertainmentResult?.success
+        ? entertainmentResult.articles
+        : [];
+
+    const newScience =
+      scienceResult?.success
+        ? scienceResult.articles
+        : [];
+
+    /* =====================
+       새 뉴스 + 이전 뉴스
+
+       부족한 만큼 이전 기사로
+       TOP10 보충
+    ===================== */
+
+    const categoryMap = {
+      종합:
+        mergeWithOldNews(
+          "종합",
+          newGeneral
+        ),
+
+      정치:
+        mergeWithOldNews(
+          "정치",
+          newPolitical
+        ),
+
+      경제:
+        mergeWithOldNews(
+          "경제",
+          newEconomy
+        ),
+
+      사회:
+        mergeWithOldNews(
+          "사회",
+          newSociety
+        ),
+
+      IT:
+        mergeWithOldNews(
+          "IT",
+          newIT
+        ),
+
+      국제:
+        mergeWithOldNews(
+          "국제",
+          newWorld
+        ),
+
+      스포츠:
+        mergeWithOldNews(
+          "스포츠",
+          newSports
+        ),
+
+      연예:
+        mergeWithOldNews(
+          "연예",
+          newEntertainment
+        ),
+
+      과학:
+        mergeWithOldNews(
+          "과학",
+          newScience
+        ),
+
+      생활:
+        mergeWithOldNews(
+          "생활",
+          newLife
+        ),
     };
 
     /*
-      종합후보도 저장
-      프론트 종합 탭에서
-      중복 제거 및 균형 선택
+      각 탭 결과 로그
     */
-    addCategory(
-      "종합",
-      collected[
-        "종합후보"
-      ] || []
-    );
 
-    addCategory(
-      "정치",
-      politicalArticles
-    );
+    for (
+      const [
+        category,
+        articles,
+      ] of Object.entries(
+        categoryMap
+      )
+    ) {
+      console.log(
+        `${category}: ${articles.length}개`
+      );
+    }
 
-    addCategory(
-      "경제",
-      collected["경제"] || []
-    );
-
-    addCategory(
-      "사회",
-      societyArticles
-    );
-
-    addCategory(
-      "IT",
-      collected["IT"] || []
-    );
-
-    addCategory(
-      "국제",
-      collected["국제"] || []
-    );
-
-    addCategory(
-      "스포츠",
-      collected["스포츠"] || []
-    );
-
-    addCategory(
-      "연예",
-      collected["연예"] || []
-    );
-
-    addCategory(
-      "과학",
-      collected["과학"] || []
-    );
-
-    addCategory(
-      "생활",
-      lifeArticles
-    );
+    const finalNews =
+      buildFinalNews(
+        categoryMap
+      );
 
     if (
       finalNews.length === 0
@@ -776,24 +1065,47 @@ async function refreshNews() {
         "기존 캐시를 유지합니다."
       );
 
-      return;
+      return false;
     }
 
     /*
-      1. 메모리 캐시 교체
+      Supabase가 연결되어 있으면
+      먼저 영구 저장.
+
+      저장 성공 후
+      메모리 캐시 교체.
     */
-    cachedNews = finalNews;
+
+    if (supabase) {
+      const saved =
+        await saveNewsToSupabase(
+          finalNews
+        );
+
+      if (!saved) {
+        console.log(
+          "Supabase 저장에 실패했습니다."
+        );
+
+        console.log(
+          "기존 캐시를 유지합니다."
+        );
+
+        return false;
+      }
+    } else {
+      lastSuccessfulRefresh =
+        new Date().toISOString();
+    }
+
+    cachedNews =
+      finalNews;
 
     console.log(
       `뉴스 갱신 완료 (${cachedNews.length}개)`
     );
 
-    /*
-      2. Supabase 영구 저장
-    */
-    await saveNewsToSupabase(
-      cachedNews
-    );
+    return true;
   } catch (error) {
     console.error(
       "뉴스 갱신 중 오류:",
@@ -803,22 +1115,61 @@ async function refreshNews() {
     console.log(
       "기존 캐시를 유지합니다."
     );
+
+    return false;
   } finally {
     isRefreshing = false;
   }
 }
 
 /* =========================
-   API
+   다음 갱신 예약
+========================= */
+
+function scheduleNextRefresh(delay) {
+  if (refreshTimer) {
+    clearTimeout(
+      refreshTimer
+    );
+  }
+
+  const safeDelay =
+    Math.max(
+      1000,
+      delay
+    );
+
+  const minutes =
+    Math.ceil(
+      safeDelay /
+        1000 /
+        60
+    );
+
+  console.log(
+    `다음 뉴스 갱신까지 약 ${minutes}분`
+  );
+
+  refreshTimer =
+    setTimeout(
+      async () => {
+        await refreshNews();
+
+        scheduleNextRefresh(
+          REFRESH_TIME
+        );
+      },
+      safeDelay
+    );
+}
+
+/* =========================
+   뉴스 API
 ========================= */
 
 app.get(
   "/api/news",
   (req, res) => {
-    /*
-      메모리에 뉴스가 있으면
-      즉시 반환
-    */
     if (
       Array.isArray(
         cachedNews
@@ -830,26 +1181,25 @@ app.get(
       );
     }
 
-    /*
-      서버 최초 실행이고
-      Supabase에도 데이터가 없는 경우
-    */
-    return res.status(503).json({
-      error:
-        "뉴스를 준비하고 있습니다. 잠시 후 다시 시도해주세요.",
-    });
+    return res
+      .status(503)
+      .json({
+        error:
+          "뉴스를 준비하고 있습니다. 잠시 후 다시 시도해주세요.",
+      });
   }
 );
 
 /* =========================
-   서버 상태 확인
+   서버 상태
 ========================= */
 
 app.get(
   "/",
   (req, res) => {
     res.json({
-      status: "ok",
+      status:
+        "ok",
 
       cachedNews:
         cachedNews.length,
@@ -858,55 +1208,170 @@ app.get(
         isRefreshing,
 
       supabase:
-        Boolean(supabase),
+        Boolean(
+          supabase
+        ),
+
+      lastSuccessfulRefresh,
+
+      cacheFresh:
+        isCacheFresh(),
     });
   }
 );
 
 /* =========================
    서버 시작
+
+   중요:
+   외부 요청을 받기 전에
+   Supabase 뉴스부터 복구
 ========================= */
 
-app.listen(
-  PORT,
-  async () => {
+async function startServer() {
+  console.log(
+    "저장된 뉴스 확인 중..."
+  );
+
+  /*
+    1.
+    Supabase에서 마지막 뉴스
+    먼저 복구
+  */
+
+  const saved =
+    await loadNewsFromSupabase();
+
+  if (
+    saved.news.length > 0
+  ) {
+    cachedNews =
+      saved.news;
+
+    lastSuccessfulRefresh =
+      saved.updatedAt;
+
     console.log(
-      `서버 실행 중: ${PORT}`
+      `저장된 뉴스 복구 완료 (${cachedNews.length}개)`
     );
+  } else {
+    console.log(
+      "복구할 저장 뉴스가 없습니다."
+    );
+  }
 
-    /*
-      1.
-      서버 재시작 시
-      Supabase에서 마지막 뉴스 복구
-    */
-    const savedNews =
-      await loadNewsFromSupabase();
+  /*
+    2.
+    뉴스 복구가 끝난 다음에
+    서버를 외부에 공개
+  */
 
-    if (
-      savedNews.length > 0
-    ) {
-      cachedNews =
-        savedNews;
+  app.listen(
+    PORT,
+    () => {
+      console.log(
+        `서버 실행 중: ${PORT}`
+      );
+
+      /*
+        3.
+        기존 뉴스가 있고
+        마지막 정상 저장 후
+        아직 3시간이 안 됐다면
+
+        GNews 호출하지 않음
+      */
+
+      if (
+        cachedNews.length > 0 &&
+        isCacheFresh()
+      ) {
+        const remaining =
+          getNextRefreshDelay();
+
+        console.log(
+          "저장된 뉴스가 아직 최신입니다."
+        );
+
+        console.log(
+          "GNews 호출을 생략합니다."
+        );
+
+        scheduleNextRefresh(
+          remaining
+        );
+
+        return;
+      }
+
+      /*
+        4.
+        기존 뉴스는 있지만
+        3시간 이상 지났다면
+
+        유저에게 기존 뉴스는
+        즉시 제공하면서
+
+        GNews 갱신은
+        백그라운드에서 실행
+      */
+
+      if (
+        cachedNews.length > 0
+      ) {
+        console.log(
+          "기존 뉴스를 먼저 제공합니다."
+        );
+
+        console.log(
+          "새 뉴스는 백그라운드에서 갱신합니다."
+        );
+
+        refreshNews()
+          .finally(() => {
+            scheduleNextRefresh(
+              REFRESH_TIME
+            );
+          });
+
+        return;
+      }
+
+      /*
+        5.
+        Supabase에도 뉴스가 없는
+        완전 최초 상태
+
+        이 경우에만
+        새 뉴스가 준비될 때까지
+        /api/news는 503 반환
+      */
 
       console.log(
-        "저장된 뉴스로 서버 시작 완료"
+        "저장된 뉴스가 없어 새 뉴스를 가져옵니다."
       );
+
+      refreshNews()
+        .finally(() => {
+          scheduleNextRefresh(
+            REFRESH_TIME
+          );
+        });
     }
+  );
+}
 
-    /*
-      2.
-      GNews 최신 뉴스는
-      백그라운드에서 갱신
-    */
-    refreshNews();
+/* =========================
+   서버 실행
+========================= */
 
-    /*
-      3.
-      이후 3시간마다 갱신
-    */
-    setInterval(
-      refreshNews,
-      REFRESH_TIME
+startServer().catch(
+  (error) => {
+    console.error(
+      "서버 시작 실패:",
+      error
     );
+
+    process.exit(1);
   }
 );
