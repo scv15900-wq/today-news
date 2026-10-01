@@ -30,7 +30,8 @@ function makeNewsItem(article, category, id) {
   return {
     id,
     title: article.title || "제목 없음",
-    summary: article.description || "요약 정보가 없습니다.",
+    summary:
+      article.description || "요약 정보가 없습니다.",
     category,
     source: article.source?.name || "뉴스 출처",
     url: article.url || "",
@@ -58,10 +59,11 @@ async function fetchFromGNews(gnewsCategory, name) {
     let response = await fetch(url);
 
     if (response.status === 429) {
-      console.log(`[${name}] 요청 제한 - 5초 후 재시도`);
+      console.log(
+        `[${name}] 요청 제한 - 5초 후 재시도`
+      );
 
       await sleep(RETRY_DELAY);
-
       response = await fetch(url);
     }
 
@@ -83,11 +85,17 @@ async function fetchFromGNews(gnewsCategory, name) {
       ? data.articles
       : [];
 
-    console.log(`[${name}] ${articles.length}개 가져옴`);
+    console.log(
+      `[${name}] ${articles.length}개 가져옴`
+    );
 
     return articles;
   } catch (error) {
-    console.error(`[${name}] 요청 실패:`, error.message);
+    console.error(
+      `[${name}] 요청 실패:`,
+      error.message
+    );
+
     return [];
   }
 }
@@ -139,75 +147,23 @@ function containsKeyword(article, keywords) {
   );
 }
 
-function normalizeTitle(title = "") {
-  return title
-    .toLowerCase()
-    .replace(/\[[^\]]*\]/g, " ")
-    .replace(/\([^)]*\)/g, " ")
-    .replace(/["'“”‘’…·]/g, " ")
-    .replace(/[^가-힣a-z0-9\s]/g, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function getTitleWords(title = "") {
-  return new Set(
-    normalizeTitle(title)
-      .split(" ")
-      .filter((word) => word.length >= 2)
-  );
-}
-
-function titleSimilarity(titleA, titleB) {
-  const wordsA = getTitleWords(titleA);
-  const wordsB = getTitleWords(titleB);
-
-  if (wordsA.size === 0 || wordsB.size === 0) {
-    return 0;
-  }
-
-  let common = 0;
-
-  for (const word of wordsA) {
-    if (wordsB.has(word)) {
-      common += 1;
-    }
-  }
-
-  return common / Math.min(wordsA.size, wordsB.size);
-}
-
-function isDuplicateArticle(article, selected) {
-  return selected.some((existing) => {
-    if (
-      article.url &&
-      existing.url &&
-      article.url === existing.url
-    ) {
-      return true;
-    }
-
-    return (
-      titleSimilarity(
-        article.title,
-        existing.title
-      ) >= 0.7
-    );
-  });
-}
-
-// 한 카테고리 안에서만 중복 제거
-function removeCategoryDuplicates(articles) {
+// 정치/사회 안에서 완전히 같은 URL만 제거.
+// 제목 유사도 제거는 하지 않아서 기사 수를 최대한 유지한다.
+function removeExactDuplicates(articles) {
   const result = [];
+  const urls = new Set();
 
   for (const article of articles) {
     if (!article.url) {
       continue;
     }
 
-    if (!isDuplicateArticle(article, result)) {
-      result.push(article);
+    if (urls.has(article.url)) {
+      continue;
     }
+
+    urls.add(article.url);
+    result.push(article);
   }
 
   return result;
@@ -257,10 +213,18 @@ async function getNews() {
 
   const collected = {};
 
-  for (let i = 0; i < categoryRequests.length; i++) {
+  // 동시에 요청하지 않고 순서대로 요청해서
+  // GNews 요청 제한 가능성을 줄인다.
+  for (
+    let i = 0;
+    i < categoryRequests.length;
+    i++
+  ) {
     const request = categoryRequests[i];
 
-    console.log(`[${request.app}] 뉴스 요청 중...`);
+    console.log(
+      `[${request.app}] 뉴스 요청 중...`
+    );
 
     collected[request.app] =
       await fetchFromGNews(
@@ -268,16 +232,20 @@ async function getNews() {
         request.app
       );
 
-    if (i < categoryRequests.length - 1) {
+    if (
+      i <
+      categoryRequests.length - 1
+    ) {
       await sleep(REQUEST_DELAY);
     }
   }
 
-  // 정치/사회는 전체 후보에서 분류
-  const allArticles = Object.values(collected).flat();
+  // 정치와 사회는 전체 기사 후보에서 분류한다.
+  const allArticles =
+    Object.values(collected).flat();
 
   const politicalArticles =
-    removeCategoryDuplicates(
+    removeExactDuplicates(
       allArticles.filter((article) =>
         containsKeyword(
           article,
@@ -287,7 +255,7 @@ async function getNews() {
     ).slice(0, 10);
 
   const societyArticles =
-    removeCategoryDuplicates(
+    removeExactDuplicates(
       allArticles.filter((article) =>
         containsKeyword(
           article,
@@ -296,8 +264,19 @@ async function getNews() {
       )
     ).slice(0, 10);
 
-  // 다른 탭과 겹치는 것은 허용.
-  // 단, 같은 탭 내부의 중복 기사만 제거.
+  /*
+   * 중요:
+   * 경제/IT/국제/스포츠/연예/과학/생활은
+   * 유사 제목 중복 제거를 하지 않는다.
+   *
+   * GNews가 내려준 최대 10개를 그대로 사용해서
+   * 중복 제거 때문에 7~9개로 줄어드는 일을 막는다.
+   *
+   * 서로 다른 카테고리끼리 같은 기사가
+   * 등장하는 것도 허용한다.
+   *
+   * 종합 탭의 중복 제거는 App.tsx에서만 한다.
+   */
   const finalCategories = [
     {
       name: "정치",
@@ -305,7 +284,7 @@ async function getNews() {
     },
     {
       name: "경제",
-      articles: removeCategoryDuplicates(
+      articles: (
         collected["경제"] || []
       ).slice(0, 10),
     },
@@ -315,37 +294,37 @@ async function getNews() {
     },
     {
       name: "IT",
-      articles: removeCategoryDuplicates(
+      articles: (
         collected["IT"] || []
       ).slice(0, 10),
     },
     {
       name: "국제",
-      articles: removeCategoryDuplicates(
+      articles: (
         collected["국제"] || []
       ).slice(0, 10),
     },
     {
       name: "스포츠",
-      articles: removeCategoryDuplicates(
+      articles: (
         collected["스포츠"] || []
       ).slice(0, 10),
     },
     {
       name: "연예",
-      articles: removeCategoryDuplicates(
+      articles: (
         collected["연예"] || []
       ).slice(0, 10),
     },
     {
       name: "과학",
-      articles: removeCategoryDuplicates(
+      articles: (
         collected["과학"] || []
       ).slice(0, 10),
     },
     {
       name: "생활",
-      articles: removeCategoryDuplicates(
+      articles: (
         collected["생활"] || []
       ).slice(0, 10),
     },
@@ -408,24 +387,33 @@ app.get("/api/news", async (req, res) => {
     }
 
     return res.status(503).json({
-      error: "현재 뉴스 데이터를 가져올 수 없습니다.",
+      error:
+        "현재 뉴스 데이터를 가져올 수 없습니다.",
     });
   } catch (error) {
-    console.error("뉴스 서버 오류:", error);
+    console.error(
+      "뉴스 서버 오류:",
+      error
+    );
 
     if (cachedNews) {
       return res.json(cachedNews);
     }
 
     return res.status(500).json({
-      error: "뉴스를 가져오는 중 오류가 발생했습니다.",
+      error:
+        "뉴스를 가져오는 중 오류가 발생했습니다.",
     });
   }
 });
 
 app.use((req, res) => {
   res.sendFile(
-    path.join(__dirname, "dist", "index.html")
+    path.join(
+      __dirname,
+      "dist",
+      "index.html"
+    )
   );
 });
 

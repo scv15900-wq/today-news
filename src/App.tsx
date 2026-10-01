@@ -57,6 +57,7 @@ function App() {
       });
   }, []);
 
+  // 종합 탭에서만 중복 기사를 제거한다.
   const balancedTopNews = () => {
     const categoryOrder = [
       "정치",
@@ -133,7 +134,7 @@ function App() {
           )
       );
 
-    // 먼저 각 분야에서 하나씩 선택
+    // 각 분야에서 하나씩 먼저 선택
     categoryOrder.forEach((category) => {
       const article = news.find(
         (item) =>
@@ -149,8 +150,8 @@ function App() {
       }
     });
 
-    // 부족한 자리는 전체 뉴스에서
-    // 중복되지 않는 기사로 채움
+    // 10개가 안 되면 전체 기사에서
+    // 중복되지 않는 기사로 채운다.
     for (const article of news) {
       if (selected.length >= 10) {
         break;
@@ -175,14 +176,31 @@ function App() {
           )
           .slice(0, 10);
 
+  const sectionName =
+    activeCategory === "🔥 종합"
+      ? "종합"
+      : activeCategory;
+
   return (
     <main className="news-app">
       <header className="news-header">
-        <h1>오늘의 뉴스</h1>
+        <div className="brand">
+          <div className="brand-mark">
+            <img
+              src="/logo.png"
+              alt="뉴스 TOP10"
+              className="brand-logo"
+            />
+          </div>
 
-        <p className="news-subtitle">
-          오늘 가장 주목받는 뉴스 TOP 10
-        </p>
+          <div className="brand-text">
+            <h1>뉴스 TOP10</h1>
+
+            <p>
+              오늘 주목받는 뉴스를 한눈에
+            </p>
+          </div>
+        </div>
       </header>
 
       <nav
@@ -192,6 +210,7 @@ function App() {
         {categories.map((category) => (
           <button
             key={category}
+            type="button"
             className={`category ${
               activeCategory === category
                 ? "active"
@@ -208,28 +227,44 @@ function App() {
 
       <section className="top-news">
         <div className="section-title">
-          <h2>
-            {activeCategory === "🔥 종합"
-              ? "🔥 종합 뉴스"
-              : `${activeCategory} 뉴스`}
-          </h2>
+          <div>
+            <h2>
+              {sectionName} TOP 10
+            </h2>
+
+            <p>
+              지금 확인할 주요 뉴스
+            </p>
+          </div>
+
+          {!loading &&
+            !error &&
+            filteredNews.length > 0 && (
+              <strong className="news-count">
+                {filteredNews.length}
+              </strong>
+            )}
         </div>
 
         {loading && (
-          <p>
+          <div className="status-box">
             뉴스를 불러오는 중입니다...
-          </p>
+          </div>
         )}
 
-        {error && <p>{error}</p>}
+        {error && (
+          <div className="status-box error">
+            {error}
+          </div>
+        )}
 
         {!loading &&
           !error &&
           filteredNews.length === 0 && (
-            <p>
+            <div className="status-box">
               현재 해당 카테고리의 뉴스가
               없습니다.
-            </p>
+            </div>
           )}
 
         {!loading &&
@@ -245,36 +280,69 @@ function App() {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
-                    <div className="rank">
+                    <div
+                      className={`rank ${
+                        index < 3
+                          ? "rank-top"
+                          : ""
+                      }`}
+                    >
                       {index + 1}
                     </div>
 
-                    {item.image && (
+                    <div className="thumbnail">
                       <img
                         className="news-image"
-                        src={item.image}
+                        src={
+                          item.image ||
+                          "/logo.png"
+                        }
                         alt=""
                         loading="lazy"
+                        onError={(e) => {
+                          const img =
+                            e.currentTarget;
+
+                          if (
+                            !img.src.endsWith(
+                              "/logo.png"
+                            )
+                          ) {
+                            img.src =
+                              "/logo.png";
+                          }
+                        }}
                       />
-                    )}
+                    </div>
 
                     <div className="news-content">
                       <div className="news-meta">
                         <span>
                           {item.category}
                         </span>
-                        <span>·</span>
-                        <span>
+
+                        <span className="dot">
+                          ·
+                        </span>
+
+                        <span className="source">
                           {item.source}
                         </span>
                       </div>
 
-                      <h3>{item.title}</h3>
+                      <h3>
+                        {item.title}
+                      </h3>
 
-                      <p>{item.summary}</p>
+                      <p>
+                        {item.summary}
+                      </p>
                     </div>
 
-                    <div className="arrow">
+                    <div
+                      className="arrow"
+                      aria-hidden="true"
+                    >
                       ›
                     </div>
                   </a>
