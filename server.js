@@ -161,6 +161,39 @@ const societyKeywords = [
 ];
 
 /* =========================
+   연예 키워드
+========================= */
+
+const entertainmentKeywords = [
+  "영화",
+  "개봉",
+  "박스오피스",
+  "드라마",
+  "시리즈",
+  "OTT",
+  "넷플릭스",
+  "Netflix",
+  "디즈니+",
+  "디즈니플러스",
+  "티빙",
+  "웨이브",
+  "쿠팡플레이",
+  "배우",
+  "가수",
+  "아이돌",
+  "걸그룹",
+  "보이그룹",
+  "예능",
+  "방송",
+  "시청률",
+  "연예",
+  "콘서트",
+  "앨범",
+  "컴백",
+  "신곡",
+];
+
+/* =========================
    생활 키워드
 ========================= */
 
@@ -193,7 +226,6 @@ const lifeKeywords = [
   "문화",
   "공연",
   "전시",
-  "영화",
   "교통",
   "지하철",
   "버스",
@@ -840,10 +872,30 @@ async function refreshNews() {
         ? sportsResult.articles
         : [];
 
+    /* =====================
+       연예 새 뉴스 강화
+
+       1. GNews entertainment 기사 우선
+       2. 전체 수집 기사에서 연예 키워드 기사 추가
+       3. 중복 제거
+       4. 최대 10개
+    ===================== */
+
+    const keywordEntertainment =
+      successfulArticles.filter((article) =>
+        containsKeyword(
+          article,
+          entertainmentKeywords
+        )
+      );
+
     const newEntertainment =
-      entertainmentResult?.success
-        ? entertainmentResult.articles
-        : [];
+      removeExactDuplicates([
+        ...(entertainmentResult?.success
+          ? entertainmentResult.articles
+          : []),
+        ...keywordEntertainment,
+      ]).slice(0, 10);
 
     const newScience =
       scienceResult?.success
